@@ -7,11 +7,22 @@ pub(super) fn render_collapsed(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
+    sections: super::agent_sidebar::AgentSectionsCollapsed,
     hits: &mut ShellHitMap,
 ) {
     let rows = agent_rows(endpoints, active_endpoint_id, config);
-    for (index, row) in rows.into_iter().take(area.height as usize).enumerate() {
+    let entries = panel_entries(&rows, sections);
+    for (index, entry) in entries.iter().take(area.height as usize).enumerate() {
         let rect = Rect::new(area.x, area.y + index as u16, area.width, 1);
+        let row = match entry {
+            super::agent_sidebar::AgentPanelEntry::Header(header) => {
+                super::agent_sidebar::render_compact_section_header(
+                    buffer, rect, *header, config, hits,
+                );
+                continue;
+            }
+            super::agent_sidebar::AgentPanelEntry::Row(row) => *row,
+        };
         if row.agent.focused {
             buffer.set_style(rect, Style::default().bg(config.palette.active_row_bg));
         }
@@ -38,7 +49,7 @@ pub(super) fn render_collapsed(
                 }),
         );
         hits.endpoint_agents
-            .push((rect, row.endpoint_id, row.agent.pane_id));
+            .push((rect, row.endpoint_id.clone(), row.agent.pane_id.clone()));
     }
 }
 
@@ -49,6 +60,7 @@ pub(super) fn render_expanded(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
+    sections: super::agent_sidebar::AgentSectionsCollapsed,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -62,10 +74,11 @@ pub(super) fn render_expanded(
         return;
     }
     let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let entries = panel_entries(&rows, sections);
     super::agent_sidebar::render_agent_list(
         buffer,
         area,
-        &rows,
+        &entries,
         agent_view_label.map(|_| " no matching agents"),
         config,
         agent_scroll,
@@ -98,20 +111,26 @@ impl ClientShellState {
             return;
         }
         let rows = agent_rows(&self.endpoints, &self.active_endpoint_id, &self.config);
-        let Some(target) = rows
-            .iter()
-            .position(|row| &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id)
-        else {
+        let entries = panel_entries(&rows, self.agent_sections);
+        let Some(target) = entries.iter().position(|entry| {
+            matches!(
+                entry,
+                super::agent_sidebar::AgentPanelEntry::Row(row)
+                    if &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id
+            )
+        }) else {
             return;
         };
-        let heights = rows
+        let heights = entries
             .iter()
-            .map(|row| row.agent.rows.len().max(1).min(u16::MAX as usize) as u16)
+            .map(|entry| match entry {
+                super::agent_sidebar::AgentPanelEntry::Header(_) => 1,
+                super::agent_sidebar::AgentPanelEntry::Row(row) => {
+                    row.agent.rows.len().max(1).min(u16::MAX as usize) as u16
+                }
+            })
             .collect::<Vec<_>>();
-        let mut gaps = vec![self.config.agents.row_gap; rows.len()];
-        if let Some(last) = gaps.last_mut() {
-            *last = 0;
-        }
+        let gaps = super::agent_sidebar::agent_entry_gaps(&entries, self.config.agents.row_gap);
         self.agent_scroll = super::scroll::list_scroll_start_to_reveal(
             &heights,
             &gaps,
@@ -127,6 +146,18 @@ struct EndpointAgentRow {
     machine_label: String,
     stale: bool,
     agent: super::agent_sidebar::AgentRow,
+}
+
+fn panel_entries(
+    rows: &[EndpointAgentRow],
+    sections: super::agent_sidebar::AgentSectionsCollapsed,
+) -> Vec<super::agent_sidebar::AgentPanelEntry<'_, EndpointAgentRow>> {
+    super::agent_sidebar::agent_panel_entries(
+        rows,
+        |row| row.agent.archived,
+        |row| row.agent.status,
+        sections,
+    )
 }
 
 fn agent_rows(

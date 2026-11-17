@@ -111,6 +111,12 @@ pub struct PaneSnapshot {
     pub agent_resume: Option<PaneAgentResumeSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_argv: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub archived: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -388,6 +394,7 @@ fn capture_tab(
                 agent_session,
                 agent_resume,
                 launch_argv,
+                archived: terminal.is_some_and(|terminal| terminal.archived),
             },
         );
     }
@@ -695,6 +702,21 @@ mod tests {
     }
 
     #[test]
+    fn pane_snapshot_archived_is_optional_on_disk() {
+        let legacy: PaneSnapshot = serde_json::from_str(r#"{"cwd":"/tmp"}"#).unwrap();
+        assert!(!legacy.archived);
+        assert!(!serde_json::to_string(&legacy).unwrap().contains("archived"));
+
+        let archived = PaneSnapshot {
+            archived: true,
+            ..legacy
+        };
+        let decoded: PaneSnapshot =
+            serde_json::from_str(&serde_json::to_string(&archived).unwrap()).unwrap();
+        assert!(decoded.archived);
+    }
+
+    #[test]
     fn round_trip_full_workspace_snapshot() {
         let mut panes = HashMap::new();
         panes.insert(
@@ -707,6 +729,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                archived: false,
             },
         );
         panes.insert(
@@ -719,6 +742,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                archived: false,
             },
         );
 
@@ -1405,6 +1429,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                archived: false,
             },
         );
         panes.insert(
@@ -1419,6 +1444,7 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
+                archived: false,
             },
         );
 

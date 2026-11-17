@@ -100,6 +100,7 @@ pub(super) struct ShellHitMap {
     pub(super) agent_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) agent_max_scroll: usize,
     pub(super) agent_sort_toggle: Rect,
+    pub(super) agent_sections: Vec<(Rect, super::agent_sidebar::AgentSection)>,
     pub(super) sidebar_divider: Rect,
     pub(super) sidebar_section_divider: Rect,
     pub(super) sidebar_toggle: Rect,
@@ -525,6 +526,8 @@ pub(super) enum ClientContextMenuAction {
     Zoom,
     ToggleRightClickPassthrough,
     ClosePane,
+    FocusAgent,
+    ToggleArchived,
 }
 
 #[derive(Debug)]
@@ -547,6 +550,11 @@ pub(super) enum ClientContextMenuTarget {
         source_pane_id: Option<String>,
         has_manual_label: bool,
         right_click_passthrough: bool,
+    },
+    Agent {
+        pane_id: String,
+        archived: bool,
+        can_archive: bool,
     },
 }
 
@@ -882,6 +890,7 @@ pub(crate) struct ClientShellState {
     pub(super) tab_press: Option<ClientTabPress>,
     pub(super) collapsed_groups: HashSet<String>,
     pub(super) remote_collapsed_groups: HashMap<ClientEndpointId, HashSet<String>>,
+    pub(super) agent_sections: super::agent_sidebar::AgentSectionsCollapsed,
     pub(super) workspace_scroll: usize,
     pub(super) agent_scroll: usize,
     pub(super) pending_agent_reveal: Option<(ClientEndpointId, String)>,
@@ -1056,6 +1065,17 @@ impl ClientShellState {
             tab_press: None,
             collapsed_groups: preferences.collapsed_groups.into_iter().collect(),
             remote_collapsed_groups,
+            agent_sections: {
+                let defaults = super::agent_sidebar::AgentSectionsCollapsed::default();
+                super::agent_sidebar::AgentSectionsCollapsed {
+                    active: preferences
+                        .active_agents_collapsed
+                        .unwrap_or(defaults.active),
+                    archived: preferences
+                        .archived_agents_collapsed
+                        .unwrap_or(defaults.archived),
+                }
+            },
             workspace_scroll: 0,
             agent_scroll: 0,
             pending_agent_reveal: None,

@@ -327,6 +327,20 @@ mod tests {
                 json!({"pane_id": "pane", "right_click": "herdr"}),
             ),
             (
+                "archive",
+                vec!["pane"],
+                "cli:pane:archive",
+                "pane.archive.set",
+                json!({"pane_id": "pane", "archived": true}),
+            ),
+            (
+                "unarchive",
+                vec!["pane"],
+                "cli:pane:unarchive",
+                "pane.archive.set",
+                json!({"pane_id": "pane", "archived": false}),
+            ),
+            (
                 "split",
                 vec!["pane", "--direction", "down"],
                 "cli:pane:split",
@@ -628,6 +642,22 @@ mod tests {
         assert_eq!(params.pane_id, "issue-1:p1");
         assert_eq!(params.right_click, PaneRightClickTarget::Pane);
         assert!(caller_target(&matches, None, None, false, true).is_err());
+    }
+
+    #[test]
+    fn parse_pane_archive_and_unarchive_target_the_named_pane() {
+        for (name, args, archived) in [
+            ("archive", vec!["w1:p2"], true),
+            ("unarchive", vec!["--pane", "w1:p2"], false),
+        ] {
+            let request = request(name, &args).unwrap();
+            let crate::api::schema::Method::PaneArchiveSet(params) = request.method else {
+                panic!("{name} should map to pane.archive.set");
+            };
+            assert_eq!(params.pane_id, "w1:p2");
+            assert_eq!(params.archived, archived);
+        }
+        assert!(request("archive", &["w1:p1", "--pane", "w1:p2"]).is_err());
     }
 
     #[test]

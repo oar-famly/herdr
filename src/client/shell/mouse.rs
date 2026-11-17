@@ -1843,6 +1843,27 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                let agent_pane_id = self
+                    .hits
+                    .agents
+                    .iter()
+                    .find(|(rect, _)| super::contains(*rect, point))
+                    .map(|(_, pane_id)| pane_id.clone())
+                    .or_else(|| {
+                        self.hits
+                            .endpoint_agents
+                            .iter()
+                            .find(|(rect, endpoint_id, _)| {
+                                super::contains(*rect, point)
+                                    && endpoint_id == &self.active_endpoint_id
+                            })
+                            .map(|(_, _, pane_id)| pane_id.clone())
+                    });
+                if let Some(pane_id) = agent_pane_id {
+                    self.open_agent_context_menu(pane_id, mouse.column, mouse.row);
+                    outcome.repaint = true;
+                    return;
+                }
                 let tab_id = self
                     .hits
                     .tabs
@@ -2020,6 +2041,18 @@ impl ClientShellState {
                             }
                         }
                     }
+                    return;
+                }
+                let section = self
+                    .hits
+                    .agent_sections
+                    .iter()
+                    .find(|(rect, _)| super::contains(*rect, point))
+                    .map(|(_, section)| *section);
+                if let Some(section) = section {
+                    self.agent_sections.toggle(section);
+                    self.persist_chrome_preferences(outcome);
+                    outcome.repaint = true;
                     return;
                 }
                 if super::contains(self.hits.agent_sort_toggle, point) {

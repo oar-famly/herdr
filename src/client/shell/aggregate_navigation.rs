@@ -58,6 +58,16 @@ pub(super) fn aggregate_agent_rows<'a>(
     active_endpoint_id: &ClientEndpointId,
     sort: crate::config::AgentPanelSortConfig,
 ) -> Vec<AggregateAgentRow<'a>> {
+    let mut rows = ordered_aggregate_agent_rows(endpoints, active_endpoint_id, sort);
+    rows.sort_by_key(|row| row.agent.archived);
+    rows
+}
+
+fn ordered_aggregate_agent_rows<'a>(
+    endpoints: &'a [ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    sort: crate::config::AgentPanelSortConfig,
+) -> Vec<AggregateAgentRow<'a>> {
     let active_index = endpoints
         .iter()
         .position(|endpoint| &endpoint.endpoint_id == active_endpoint_id);
@@ -264,15 +274,20 @@ pub(super) fn online_agent_targets(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     sort: crate::config::AgentPanelSortConfig,
+    sections: super::agent_sidebar::AgentSectionsCollapsed,
 ) -> Vec<AggregateAgentTarget> {
-    aggregate_agent_rows(endpoints, active_endpoint_id, sort)
-        .into_iter()
-        .filter(|row| !row.endpoint.stale())
-        .map(|row| AggregateAgentTarget {
-            endpoint_id: row.endpoint.endpoint_id.clone(),
-            pane_id: row.agent.pane_id.clone(),
-        })
-        .collect()
+    super::agent_sidebar::visible_in_sections(
+        aggregate_agent_rows(endpoints, active_endpoint_id, sort),
+        |row| row.agent.archived,
+        sections,
+    )
+    .into_iter()
+    .filter(|row| !row.endpoint.stale())
+    .map(|row| AggregateAgentTarget {
+        endpoint_id: row.endpoint.endpoint_id.clone(),
+        pane_id: row.agent.pane_id.clone(),
+    })
+    .collect()
 }
 
 pub(super) fn navigator_rows(

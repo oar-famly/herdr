@@ -236,6 +236,8 @@ pub struct AgentInfo {
     pub pane_id: String,
     pub focused: bool,
     #[serde(default, skip_serializing_if = "super::is_false")]
+    pub archived: bool,
+    #[serde(default, skip_serializing_if = "super::is_false")]
     pub launch_pending: bool,
     #[serde(default, skip_serializing_if = "super::is_false")]
     pub interactive_ready: bool,

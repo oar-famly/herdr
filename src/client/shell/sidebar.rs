@@ -50,6 +50,7 @@ pub(crate) fn render_collapsed_sidebar(
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
     selected_workspace_id: Option<&str>,
+    agent_sections: super::super::agent_sidebar::AgentSectionsCollapsed,
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
@@ -127,24 +128,43 @@ pub(crate) fn render_collapsed_sidebar(
         detail_area.width,
         detail_area.height.saturating_sub(1),
     );
-    for (index, pane_id) in super::ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
+    let agents = super::ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
         .into_iter()
+        .filter_map(|pane_id| {
+            snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.pane_id == pane_id)
+        })
+        .collect::<Vec<_>>();
+    let entries = super::super::agent_sidebar::agent_panel_entries(
+        &agents,
+        |agent| agent.archived,
+        |agent| agent.agent_status,
+        agent_sections,
+    );
+    let mut index = 0;
+    for (row, entry) in entries
+        .iter()
         .take(detail_content.height as usize)
         .enumerate()
     {
-        let Some(agent) = snapshot
-            .agents
-            .iter()
-            .find(|agent| agent.pane_id == pane_id)
-        else {
-            continue;
-        };
         let rect = Rect::new(
             detail_content.x,
-            detail_content.y + index as u16,
+            detail_content.y + row as u16,
             detail_content.width,
             1,
         );
+        let agent = match entry {
+            super::super::agent_sidebar::AgentPanelEntry::Header(header) => {
+                super::super::agent_sidebar::render_compact_section_header(
+                    buffer, rect, *header, config, hits,
+                );
+                continue;
+            }
+            super::super::agent_sidebar::AgentPanelEntry::Row(agent) => *agent,
+        };
+        let pane_id = agent.pane_id.clone();
         if agent.focused {
             buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
         }
@@ -169,6 +189,7 @@ pub(crate) fn render_collapsed_sidebar(
             Style::default().fg(status_color(agent.agent_status, palette)),
         );
         hits.agents.push((rect, pane_id));
+        index += 1;
     }
     hits.sidebar_toggle = if area.is_empty() || workspace_area.width == 0 {
         Rect::default()
@@ -435,6 +456,7 @@ pub(crate) fn render_sidebar(
         detail_area,
         snapshot,
         config,
+        state.agent_sections,
         state.agent_scroll,
         hits,
     );

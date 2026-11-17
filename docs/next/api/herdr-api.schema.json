@@ -778,6 +778,9 @@
             "agent_status": {
               "$ref": "#/schemas/event/$defs/AgentStatus"
             },
+            "archived": {
+              "type": "boolean"
+            },
             "cwd": {
               "type": [
                 "string",
@@ -2436,6 +2439,21 @@
             "unknown"
           ],
           "type": "string"
+        },
+        "PaneArchiveSetParams": {
+          "properties": {
+            "archived": {
+              "type": "boolean"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id",
+            "archived"
+          ],
+          "type": "object"
         },
         "PaneClearAgentAuthorityParams": {
           "properties": {
@@ -6312,6 +6330,22 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.archive.set",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneArchiveSetParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -6560,6 +6594,9 @@
             },
             "agent_status": {
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
+            },
+            "archived": {
+              "type": "boolean"
             },
             "completion_seq": {
               "description": "The current idle transition completed work, independently of who has viewed it.",
@@ -7885,6 +7922,9 @@
             },
             "agent_status": {
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
+            },
+            "archived": {
+              "type": "boolean"
             },
             "cwd": {
               "type": [

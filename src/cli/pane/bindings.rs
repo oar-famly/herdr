@@ -437,6 +437,21 @@ impl Leaf {
     }
 }
 
+fn archive_method(matches: &clap::ArgMatches, archived: bool) -> Result<Method, ParseError> {
+    let mut params = PaneArchiveProjection::from_matches(matches)?;
+    let explicit = (!params.pane_id.is_empty()).then(|| params.pane_id.clone());
+    params.pane_id = super::caller_target(
+        matches,
+        explicit,
+        crate::cli::target::caller_pane_id().as_deref(),
+        true,
+        true,
+    )?
+    .ok_or_else(|| ParseError::Usage("pass PANE_ID, --pane, or run inside a herdr pane".into()))?;
+    params.archived = archived;
+    Ok(Method::PaneArchiveSet(params))
+}
+
 macro_rules! leaf {
     ($name:literal, $about:literal, $id:literal, $output:ident, $projection:ident, $method:ident) => {
         Leaf {
@@ -610,6 +625,22 @@ pub(super) const LEAVES: &[Leaf] = &[
             }
             Ok(Method::PaneInputSet(params))
         },
+    },
+    Leaf {
+        name: "archive",
+        about: "Move a pane's agent to the Archived section of the agents panel",
+        id: "cli:pane:archive",
+        output: Output::Json,
+        arguments: PaneArchiveProjection::arguments,
+        method: |matches| archive_method(matches, true),
+    },
+    Leaf {
+        name: "unarchive",
+        about: "Move a pane's agent back to the Active section of the agents panel",
+        id: "cli:pane:unarchive",
+        output: Output::Json,
+        arguments: PaneArchiveProjection::arguments,
+        method: |matches| archive_method(matches, false),
     },
     Leaf {
         name: "split",

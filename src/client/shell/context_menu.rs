@@ -50,6 +50,21 @@ impl ClientContextMenuOverlay {
                 item("Rename", Action::Rename),
                 item("Close", Action::Close),
             ],
+            ClientContextMenuTarget::Agent {
+                archived,
+                can_archive,
+                ..
+            } => {
+                let mut items = vec![item("Focus", Action::FocusAgent)];
+                if *can_archive {
+                    items.push(item(
+                        if *archived { "Unarchive" } else { "Archive" },
+                        Action::ToggleArchived,
+                    ));
+                }
+                items.push(item("Rename pane", Action::RenamePane));
+                items
+            }
             ClientContextMenuTarget::Pane {
                 source_pane_id,
                 has_manual_label,
@@ -167,6 +182,34 @@ impl ClientShellState {
         }));
     }
 
+    pub(super) fn open_agent_context_menu(&mut self, pane_id: String, x: u16, y: u16) {
+        let Some(agent) = self.snapshot.as_deref().and_then(|snapshot| {
+            snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.pane_id == pane_id)
+        }) else {
+            return;
+        };
+        let archived = agent.archived;
+        let can_archive = self.supports_endpoint_method(
+            &crate::api::schema::Method::PaneArchiveSet(crate::api::schema::PaneArchiveSetParams {
+                pane_id: pane_id.clone(),
+                archived: !archived,
+            }),
+        );
+        self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
+            target: ClientContextMenuTarget::Agent {
+                pane_id,
+                archived,
+                can_archive,
+            },
+            x,
+            y,
+            highlighted: 0,
+        }));
+    }
+
     pub(super) fn move_context_menu_selection(&mut self, delta: isize) {
         let Some(ClientShellOverlay::ContextMenu(menu)) = self.overlay.as_mut() else {
             return;
@@ -215,6 +258,9 @@ impl ClientShellState {
                 action,
                 outcome,
             ),
+            ClientContextMenuTarget::Agent {
+                pane_id, archived, ..
+            } => self.activate_agent_context_action(pane_id, archived, action, outcome),
         }
         outcome.repaint = true;
     }
@@ -350,6 +396,46 @@ impl ClientShellState {
             }
             ClientContextMenuAction::Close => {
                 self.request_tab_close(tab_id, outcome);
+            }
+            _ => {}
+        }
+    }
+
+    fn activate_agent_context_action(
+        &mut self,
+        pane_id: String,
+        archived: bool,
+        action: ClientContextMenuAction,
+        outcome: &mut ClientShellInput,
+    ) {
+        use crate::api::schema::{Method, PaneArchiveSetParams, PaneTarget};
+
+        match action {
+            ClientContextMenuAction::FocusAgent => {
+                self.push_endpoint_method(Method::PaneFocus(PaneTarget { pane_id }), outcome)
+            }
+            ClientContextMenuAction::ToggleArchived => self.push_endpoint_method(
+                Method::PaneArchiveSet(PaneArchiveSetParams {
+                    pane_id,
+                    archived: !archived,
+                }),
+                outcome,
+            ),
+            ClientContextMenuAction::RenamePane => {
+                let workspace_id = self
+                    .snapshot
+                    .as_deref()
+                    .and_then(|snapshot| snapshot.panes.iter().find(|pane| pane.pane_id == pane_id))
+                    .map(|pane| pane.workspace_id.clone())
+                    .unwrap_or_default();
+                self.activate_pane_context_action(
+                    pane_id,
+                    workspace_id,
+                    None,
+                    false,
+                    action,
+                    outcome,
+                );
             }
             _ => {}
         }

@@ -41,6 +41,14 @@ crate::cli::projection::cli_params! {
 
 crate::cli::projection::cli_params! {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    pub struct PaneArchiveSetParams => PaneArchiveProjection {
+        pub pane_id: String => binding::input_target(),
+        pub archived: bool => Field::new(true),
+    }
+}
+
+crate::cli::projection::cli_params! {
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct PaneInputSetParams => PaneInputProjection {
         pub pane_id: String => binding::input_target(),
         pub right_click: PaneRightClickTarget => Field::new(PaneRightClickTarget::Herdr).input(binding::right_click().required()),
@@ -510,6 +518,8 @@ pub struct PaneInfo {
     pub restore_error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "super::is_false")]
+    pub archived: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

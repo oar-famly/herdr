@@ -236,6 +236,7 @@ pub(super) struct ShellRenderState<'a> {
     pub(super) collapsed_endpoints: &'a HashSet<ClientEndpointId>,
     pub(super) collapsed_groups: &'a HashSet<String>,
     pub(super) remote_collapsed_groups: &'a HashMap<ClientEndpointId, HashSet<String>>,
+    pub(super) agent_sections: super::agent_sidebar::AgentSectionsCollapsed,
     pub(super) workspace_scroll: &'a mut usize,
     pub(super) agent_scroll: &'a mut usize,
     pub(super) tab_scroll: &'a mut usize,
@@ -296,6 +297,7 @@ pub(super) fn render_shell(
                 state
                     .selected_workspace_id
                     .map(|target| target.workspace_id.as_str()),
+                state.agent_sections,
                 &mut hits,
             );
         } else {

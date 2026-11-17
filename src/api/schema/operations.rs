@@ -191,6 +191,7 @@ mod tests {
             "pane.edit_scrollback",
             "pane.focus",
             "pane.input.set",
+            "pane.archive.set",
             "pane.rename",
             "pane.report_agent",
             "pane.report_agent_session",

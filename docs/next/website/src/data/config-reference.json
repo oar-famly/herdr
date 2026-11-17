@@ -632,6 +632,12 @@
           "description": "Focus an agent by index 1-9. Unset by default."
         },
         {
+          "key": "keys.toggle_agent_archived",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Move the focused agent between the Active and Archived sections of the agent panel. Unset by default."
+        },
+        {
           "key": "keys.remote_image_paste",
           "type": "string",
           "default": "\"ctrl+v\"",

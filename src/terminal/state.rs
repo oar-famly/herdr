@@ -141,6 +141,7 @@ pub struct TerminalState {
     reported_resume_revision: u64,
     pub terminal_title: Option<String>,
     pub manual_label: Option<String>,
+    pub archived: bool,
     pub agent_name: Option<String>,
     agent_name_owner: Option<AgentNameOwner>,
     managed_agent: Option<ManagedAgent>,
@@ -181,6 +182,7 @@ impl TerminalState {
             reported_resume_revision: 0,
             terminal_title: None,
             manual_label: None,
+            archived: false,
             agent_name: None,
             agent_name_owner: None,
             managed_agent: None,
@@ -2105,6 +2107,15 @@ impl TerminalState {
 
     pub fn clear_manual_label(&mut self) {
         self.manual_label = None;
+    }
+
+    pub fn set_archived(&mut self, archived: bool) -> bool {
+        if self.archived == archived {
+            return false;
+        }
+        self.archived = archived;
+        self.revision = self.revision.wrapping_add(1);
+        true
     }
 
     pub fn set_agent_name(&mut self, name: String) {
