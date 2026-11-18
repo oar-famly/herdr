@@ -1815,10 +1815,9 @@ fn agent_groups_render_as_collapsible_sections_that_persist_their_toggle() {
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("grouped agent sidebar");
     let rows = frame_rows(&frame);
-    for header in ["   1 active ──", "   1 reviews ──", "   1 parked ──"] {
+    for header in [" ▾ active 1 ──", " ▾ reviews 1 ──", " ▾ parked 1 ──"] {
         assert!(
-            rows.iter()
-                .any(|row| row.contains(header) && row.contains("─ ▾")),
+            rows.iter().any(|row| row.contains(header)),
             "{header}: {rows:#?}"
         );
     }
@@ -1829,7 +1828,7 @@ fn agent_groups_render_as_collapsible_sections_that_persist_their_toggle() {
     let frame = state.compose(106, 30).expect("collapsed parked section");
     assert!(frame_rows(&frame)
         .iter()
-        .any(|row| row.contains(" ● 1 parked ──") && row.contains("─ ▸")));
+        .any(|row| row.contains(" ▸ ● parked 1 ──")));
     assert_eq!(agent_hit_ids(&state), ["pane_1", "pane_3"]);
 
     let reloaded = ClientShellState::new(

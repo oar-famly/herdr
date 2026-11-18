@@ -451,18 +451,25 @@ pub(super) fn render_section_header(
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
-    let status = header
-        .status
-        .unwrap_or(crate::api::schema::AgentStatus::Unknown);
-    let mut spans = vec![
-        ratatui::text::Span::raw(" "),
-        ratatui::text::Span::styled(
-            if header.collapsed {
-                status_icon(status, config.status_indicators)
-            } else {
-                " "
-            },
+    let mut spans = vec![ratatui::text::Span::styled(
+        format!(" {}", if header.collapsed { "▸" } else { "▾" }),
+        Style::default().fg(palette.accent),
+    )];
+    if header.collapsed {
+        let status = header
+            .status
+            .unwrap_or(crate::api::schema::AgentStatus::Unknown);
+        spans.push(ratatui::text::Span::styled(
+            format!(" {}", status_icon(status, config.status_indicators)),
             Style::default().fg(status_color(status, palette)),
+        ));
+    }
+    spans.extend([
+        ratatui::text::Span::styled(
+            format!(" {}", header.label),
+            Style::default()
+                .fg(palette.overlay0)
+                .add_modifier(Modifier::BOLD),
         ),
         ratatui::text::Span::styled(
             format!(" {}", header.count),
@@ -470,20 +477,9 @@ pub(super) fn render_section_header(
                 .fg(palette.overlay0)
                 .add_modifier(Modifier::DIM),
         ),
-        ratatui::text::Span::styled(
-            format!(" {}", header.label),
-            Style::default()
-                .fg(palette.overlay0)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ];
-    let toggle = ratatui::text::Span::styled(
-        format!(" {}", if header.collapsed { "▸" } else { "▾" }),
-        Style::default().fg(palette.accent),
-    );
+    ]);
     let used = spans
         .iter()
-        .chain([&toggle])
         .map(|span| display_width(&span.content))
         .sum::<usize>();
     let rule = (rect.width as usize).saturating_sub(used + 1);
@@ -492,9 +488,6 @@ pub(super) fn render_section_header(
             format!(" {}", "─".repeat(rule)),
             Style::default().fg(palette.surface_dim),
         ));
-    }
-    if (rect.width as usize) >= used {
-        spans.push(toggle);
     }
     let line = Rect::new(rect.x, rect.y, rect.width, 1);
     Paragraph::new(Line::from(spans)).render(line, buffer);
