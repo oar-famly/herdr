@@ -176,11 +176,11 @@ pub(super) fn agent_panel_entry_index(
 pub(super) fn agent_entry_gaps<T>(entries: &[AgentPanelEntry<'_, T>], row_gap: u16) -> Vec<u16> {
     entries
         .iter()
-        .enumerate()
-        .map(|(index, entry)| match entry {
-            _ if index + 1 == entries.len() => 0,
-            AgentPanelEntry::Header(_) => 0,
-            AgentPanelEntry::Row(_) => row_gap,
+        .zip(entries.iter().skip(1).map(Some).chain([None]))
+        .map(|(entry, next)| match (entry, next) {
+            (_, None) => 0,
+            (_, Some(AgentPanelEntry::Header(_))) => row_gap.max(1),
+            (_, Some(AgentPanelEntry::Row(_))) => row_gap,
         })
         .collect()
 }
@@ -428,6 +428,17 @@ pub(super) fn render_section_header(
         spans.push(ratatui::text::Span::styled(
             format!(" {}", status_icon(status, config.status_indicators)),
             Style::default().fg(status_color(status, palette)),
+        ));
+    }
+    let used = spans
+        .iter()
+        .map(|span| display_width(&span.content))
+        .sum::<usize>();
+    let rule = (rect.width as usize).saturating_sub(used + 1);
+    if rule > 0 {
+        spans.push(ratatui::text::Span::styled(
+            format!(" {}", "─".repeat(rule)),
+            Style::default().fg(palette.surface_dim),
         ));
     }
     let line = Rect::new(rect.x, rect.y, rect.width, 1);
@@ -737,9 +748,32 @@ mod tests {
     }
 
     #[test]
-    fn section_headers_never_add_a_row_gap_below_themselves() {
+    fn a_blank_line_separates_the_sections_but_not_a_title_from_its_agents() {
         let rows = rows();
         let entries = agent_panel_entries(&rows, |row| row.1, |row| row.2, expanded());
-        assert_eq!(agent_entry_gaps(&entries, 1), [0, 1, 1, 0, 1, 0]);
+        assert_eq!(agent_entry_gaps(&entries, 0), [0, 0, 1, 0, 0, 0]);
+        assert_eq!(agent_entry_gaps(&entries, 2), [2, 2, 2, 2, 2, 0]);
+
+        let only_archived = AgentSectionsCollapsed {
+            active: true,
+            archived: false,
+        };
+        let entries = agent_panel_entries(&rows, |row| row.1, |row| row.2, only_archived);
+        assert_eq!(agent_entry_gaps(&entries, 0), [1, 0, 0, 0]);
+    }
+
+    #[test]
+    fn sectionless_panels_keep_the_configured_row_gap() {
+        let rows = vec![
+            ("a", false, AgentStatus::Idle),
+            ("b", false, AgentStatus::Idle),
+        ];
+        let entries = agent_panel_entries(
+            &rows,
+            |row| row.1,
+            |row| row.2,
+            AgentSectionsCollapsed::default(),
+        );
+        assert_eq!(agent_entry_gaps(&entries, 0), [0, 0]);
     }
 }

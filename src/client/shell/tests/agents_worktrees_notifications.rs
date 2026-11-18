@@ -1766,8 +1766,14 @@ fn archived_agents_collapse_into_a_section_that_persists_its_toggle() {
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("sectioned agent sidebar");
     let rows = frame_rows(&frame);
-    assert!(rows.iter().any(|row| row.contains(" ▾ active 1 ")), "{rows:#?}");
-    assert!(rows.iter().any(|row| row.contains(" ▸ archived 1 ●")), "{rows:#?}");
+    assert!(
+        rows.iter().any(|row| row.contains(" ▾ active 1 ──")),
+        "{rows:#?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains(" ▸ archived 1 ● ──")),
+        "{rows:#?}"
+    );
 
     assert_eq!(agent_hit_ids(&state), ["pane_1"]);
     assert_eq!(
