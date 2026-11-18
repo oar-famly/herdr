@@ -582,7 +582,7 @@ fn pane_cycle_last_and_agent_actions_resolve_to_stable_pane_ids() {
             state_labels: Vec::new(),
             tokens: Vec::new(),
             focused: true,
-            archived: false,
+            agent_group: None,
         },
         ClientShellAgent {
             pane_id: "pane_2".into(),
@@ -599,7 +599,7 @@ fn pane_cycle_last_and_agent_actions_resolve_to_stable_pane_ids() {
             state_labels: Vec::new(),
             tokens: Vec::new(),
             focused: false,
-            archived: false,
+            agent_group: None,
         },
     ];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
@@ -674,7 +674,7 @@ fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
             state_labels: Vec::new(),
             tokens: vec![("summary".into(), "review complete".into())],
             focused: true,
-            archived: false,
+            agent_group: None,
         },
         ClientShellAgent {
             pane_id: "pane_2".into(),
@@ -691,7 +691,7 @@ fn agent_sidebar_honors_priority_symbols_tokens_and_stable_hits() {
             state_labels: vec![("blocked".into(), "needs input".into())],
             tokens: vec![("summary".into(), "waiting for Can".into())],
             focused: false,
-            archived: false,
+            agent_group: None,
         },
     ];
     let mut config = Config::default();
@@ -815,7 +815,7 @@ fn muted_agent_sidebar_rows_do_not_stack_terminal_faint() {
         state_labels: Vec::new(),
         tokens: Vec::new(),
         focused: true,
-        archived: false,
+        agent_group: None,
     }];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.set_snapshot(Box::new(projected));
@@ -883,7 +883,7 @@ fn active_agent_view_controls_sidebar_order_and_focus_indices() {
             state_labels: Vec::new(),
             tokens: Vec::new(),
             focused: true,
-            archived: false,
+            agent_group: None,
         },
         ClientShellAgent {
             pane_id: "pane_2".into(),
@@ -900,7 +900,7 @@ fn active_agent_view_controls_sidebar_order_and_focus_indices() {
             state_labels: Vec::new(),
             tokens: Vec::new(),
             focused: false,
-            archived: false,
+            agent_group: None,
         },
         ClientShellAgent {
             pane_id: "pane_3".into(),
@@ -917,7 +917,7 @@ fn active_agent_view_controls_sidebar_order_and_focus_indices() {
             state_labels: Vec::new(),
             tokens: Vec::new(),
             focused: false,
-            archived: false,
+            agent_group: None,
         },
     ];
     projected.agent_view_label = Some("review".into());
@@ -992,7 +992,7 @@ fn agent_sort_toggle_is_client_local_and_persists_per_endpoint() {
         state_labels: Vec::new(),
         tokens: Vec::new(),
         focused: true,
-        archived: false,
+        agent_group: None,
     });
     let config =
         ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
@@ -1558,7 +1558,7 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
         state_labels: Vec::new(),
         tokens: Vec::new(),
         focused: false,
-        archived: false,
+        agent_group: None,
     });
     state.set_snapshot(Box::new(projected));
     state.set_pane_surface(surface());
@@ -1693,10 +1693,10 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert_eq!(state.pending_notifications.len(), 1);
 }
 
-fn sectioned_agent(
+fn grouped_agent(
     pane_id: &str,
     status: AgentStatus,
-    archived: bool,
+    agent_group: Option<&str>,
     focused: bool,
 ) -> ClientShellAgent {
     ClientShellAgent {
@@ -1714,26 +1714,43 @@ fn sectioned_agent(
         state_labels: Vec::new(),
         tokens: Vec::new(),
         focused,
-        archived,
+        agent_group: agent_group.map(str::to_owned),
     }
 }
 
-fn sectioned_agents_snapshot() -> ClientShellSnapshot {
+fn grouped_agents_snapshot() -> ClientShellSnapshot {
     let mut projected = snapshot();
-    let mut second_pane = projected.panes[0].clone();
-    second_pane.pane_id = "pane_2".into();
-    second_pane.focused = false;
-    projected.panes.push(second_pane);
+    for pane_id in ["pane_2", "pane_3"] {
+        let mut pane = projected.panes[0].clone();
+        pane.pane_id = pane_id.into();
+        pane.focused = false;
+        projected.panes.push(pane);
+    }
+    projected.agent_groups = vec![
+        crate::protocol::ClientShellAgentGroup {
+            group_id: "g1".into(),
+            label: "reviews".into(),
+        },
+        crate::protocol::ClientShellAgentGroup {
+            group_id: "g2".into(),
+            label: "parked".into(),
+        },
+    ];
     projected.agents = vec![
-        sectioned_agent("pane_1", AgentStatus::Idle, false, true),
-        sectioned_agent("pane_2", AgentStatus::Blocked, true, false),
+        grouped_agent("pane_1", AgentStatus::Idle, None, true),
+        grouped_agent("pane_2", AgentStatus::Blocked, Some("g2"), false),
+        grouped_agent("pane_3", AgentStatus::Working, Some("g1"), false),
     ];
     projected
 }
 
 fn left_click(state: &mut ClientShellState, rect: Rect) -> ClientShellInput {
+    click(state, rect, MouseButton::Left)
+}
+
+fn click(state: &mut ClientShellState, rect: Rect, button: MouseButton) -> ClientShellInput {
     state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
-        kind: MouseEventKind::Down(MouseButton::Left),
+        kind: MouseEventKind::Down(button),
         column: rect.x + 1,
         row: rect.y,
         modifiers: KeyModifiers::empty(),
@@ -1749,8 +1766,40 @@ fn agent_hit_ids(state: &ClientShellState) -> Vec<&str> {
         .collect()
 }
 
+fn menu_labels(state: &ClientShellState) -> Vec<String> {
+    match state.overlay.as_ref() {
+        Some(ClientShellOverlay::ContextMenu(menu)) => menu
+            .items()
+            .iter()
+            .map(|item| item.label.to_string())
+            .collect(),
+        _ => panic!("expected a context menu"),
+    }
+}
+
+fn choose(state: &mut ClientShellState, label: &str) -> ClientShellInput {
+    let index = menu_labels(state)
+        .iter()
+        .position(|candidate| candidate == label)
+        .unwrap_or_else(|| panic!("menu item {label:?} in {:?}", menu_labels(state)));
+    state.compose(106, 30).expect("context menu");
+    let row = state.hits.context_menu_rows[index].0;
+    left_click(state, row)
+}
+
+fn endpoint_methods(outcome: &ClientShellInput) -> Vec<&crate::api::schema::Method> {
+    outcome
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            ClientShellAction::Endpoint { request, .. } => Some(&request.method),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
-fn archived_agents_collapse_into_a_section_that_persists_its_toggle() {
+fn agent_groups_render_as_collapsible_sections_that_persist_their_toggle() {
     let path = std::env::temp_dir().join(format!(
         "herdr-shell-agent-sections-{}-{}.json",
         std::process::id(),
@@ -1762,149 +1811,191 @@ fn archived_agents_collapse_into_a_section_that_persists_its_toggle() {
     let config =
         ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone());
     let mut state = ClientShellState::new(config);
-    state.set_snapshot(Box::new(sectioned_agents_snapshot()));
+    state.set_snapshot(Box::new(grouped_agents_snapshot()));
     state.set_pane_surface(surface());
-    let frame = state.compose(106, 30).expect("sectioned agent sidebar");
+    let frame = state.compose(106, 30).expect("grouped agent sidebar");
     let rows = frame_rows(&frame);
-    assert!(
-        rows.iter().any(|row| row.contains(" ▾ active 1 ──")),
-        "{rows:#?}"
-    );
-    assert!(
-        rows.iter().any(|row| row.contains(" ▸ archived 1 ● ──")),
-        "{rows:#?}"
-    );
+    for header in [" ○ 1 active ──", " ● 1 reviews ──", " ● 1 parked ──"] {
+        assert!(
+            rows.iter()
+                .any(|row| row.contains(header) && row.contains("─ ▾")),
+            "{header}: {rows:#?}"
+        );
+    }
+    assert_eq!(agent_hit_ids(&state), ["pane_1", "pane_3", "pane_2"]);
 
-    assert_eq!(agent_hit_ids(&state), ["pane_1"]);
-    assert_eq!(
-        state
-            .hits
-            .agent_sections
-            .iter()
-            .map(|(_, section)| *section)
-            .collect::<Vec<_>>(),
-        [
-            super::super::agent_sidebar::AgentSection::Active,
-            super::super::agent_sidebar::AgentSection::Archived
-        ]
-    );
-
-    let archived_header = state.hits.agent_sections[1].0;
-    let click = left_click(&mut state, archived_header);
-    assert!(click.actions.is_empty());
-    assert!(!state.agent_sections.archived);
-    state.compose(106, 30).expect("expanded archived section");
-    assert_eq!(agent_hit_ids(&state), ["pane_1", "pane_2"]);
+    let parked_header = state.hits.agent_sections[2].0;
+    assert!(left_click(&mut state, parked_header).actions.is_empty());
+    let frame = state.compose(106, 30).expect("collapsed parked section");
+    assert!(frame_rows(&frame)
+        .iter()
+        .any(|row| row.contains(" ● 1 parked ──") && row.contains("─ ▸")));
+    assert_eq!(agent_hit_ids(&state), ["pane_1", "pane_3"]);
 
     let reloaded = ClientShellState::new(
         ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone()),
     );
-    assert!(!reloaded.agent_sections.archived);
-    assert!(!reloaded.agent_sections.active);
+    assert!(reloaded.agent_sections.is_collapsed(&Some("g2".to_owned())));
+    assert!(!reloaded.agent_sections.is_collapsed(&None));
     std::fs::remove_file(path).expect("remove agent section preferences");
 }
 
 #[test]
-fn agent_context_menu_and_keybinding_toggle_archived_through_the_endpoint() {
+fn agent_menu_moves_agents_between_groups_and_creates_new_ones() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    state.set_snapshot(Box::new(sectioned_agents_snapshot()));
+    state.set_snapshot(Box::new(grouped_agents_snapshot()));
     state.set_pane_surface(surface());
-    state.agent_sections.archived = false;
-    state.compose(106, 30).expect("expanded agent sidebar");
+    state.compose(106, 30).expect("grouped agent sidebar");
 
-    let archived_row = state.hits.agents[1].0;
-    state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
-        kind: MouseEventKind::Down(MouseButton::Right),
-        column: archived_row.x + 1,
-        row: archived_row.y,
-        modifiers: KeyModifiers::empty(),
-    })]);
-    let items = match state.overlay.as_ref() {
-        Some(ClientShellOverlay::ContextMenu(menu)) => menu.items(),
-        _ => panic!("agent rows should open a context menu"),
-    };
-    let toggle = items
-        .iter()
-        .position(|item| item.action == ClientContextMenuAction::ToggleArchived)
-        .expect("archive toggle item");
-    assert_eq!(items[toggle].label, "Unarchive");
-    state.compose(106, 30).expect("agent context menu");
-    let row = state.hits.context_menu_rows[toggle].0;
-    let outcome = left_click(&mut state, row);
-    let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
-        panic!("archive toggle should use the endpoint API");
-    };
+    let parked_row = state.hits.agents[2].0;
+    click(&mut state, parked_row, MouseButton::Right);
+    assert_eq!(
+        menu_labels(&state),
+        [
+            "Focus",
+            "Move to: active",
+            "Move to: reviews",
+            "New agent group...",
+            "Rename pane"
+        ]
+    );
+    let outcome = choose(&mut state, "Move to: reviews");
     assert!(matches!(
-        &request.method,
-        crate::api::schema::Method::PaneArchiveSet(params)
-            if params.pane_id == "pane_2" && !params.archived
+        endpoint_methods(&outcome)[..],
+        [crate::api::schema::Method::PaneGroupSet(params)]
+            if params.pane_id == "pane_2" && params.group.as_deref() == Some("g1")
     ));
 
-    let mut keyed = ClientShellInput::default();
-    state.record_binding(
-        crate::input::KeybindMatch::Action(crate::input::KeybindAction::ToggleAgentArchived),
-        &mut keyed,
-    );
-    let [ClientShellAction::Endpoint { request, .. }] = &keyed.actions[..] else {
-        panic!("archive keybinding should use the endpoint API");
+    state.compose(106, 30).expect("grouped agent sidebar");
+    let parked_row = state.hits.agents[2].0;
+    click(&mut state, parked_row, MouseButton::Right);
+    choose(&mut state, "New agent group...");
+    let Some(ClientShellOverlay::Rename(rename)) = state.overlay.as_mut() else {
+        panic!("new group should prompt for a name");
     };
+    rename.input = TextEditor::new("cross-repo", false);
+    let mut created = ClientShellInput::default();
+    state.save_rename_overlay(&mut created);
     assert!(matches!(
-        &request.method,
-        crate::api::schema::Method::PaneArchiveSet(params)
-            if params.pane_id == "pane_1" && params.archived
+        endpoint_methods(&created)[..],
+        [
+            crate::api::schema::Method::AgentGroupCreate(create),
+            crate::api::schema::Method::PaneGroupSet(assign),
+        ] if create.label == "cross-repo"
+            && assign.pane_id == "pane_2"
+            && assign.group.as_deref() == Some("cross-repo")
     ));
 }
 
 #[test]
-fn agent_context_menu_omits_archive_for_servers_without_the_method() {
+fn group_header_menu_renames_reorders_and_deletes() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    state.set_snapshot(Box::new(sectioned_agents_snapshot()));
+    state.set_snapshot(Box::new(grouped_agents_snapshot()));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("grouped agent sidebar");
+
+    let active_header = state.hits.agent_sections[0].0;
+    click(&mut state, active_header, MouseButton::Right);
+    assert_eq!(menu_labels(&state), ["New agent group..."]);
+    state.overlay = None;
+
+    let reviews_header = state.hits.agent_sections[1].0;
+    click(&mut state, reviews_header, MouseButton::Right);
+    assert_eq!(
+        menu_labels(&state),
+        [
+            "Rename group",
+            "Move down",
+            "Delete group",
+            "New agent group..."
+        ]
+    );
+    let moved = choose(&mut state, "Move down");
+    assert!(matches!(
+        endpoint_methods(&moved)[..],
+        [crate::api::schema::Method::AgentGroupMove(params)]
+            if params.group == "g1"
+                && params.direction == crate::api::schema::AgentGroupMoveDirection::Down
+    ));
+
+    state.compose(106, 30).expect("grouped agent sidebar");
+    let parked_header = state.hits.agent_sections[2].0;
+    click(&mut state, parked_header, MouseButton::Right);
+    let deleted = choose(&mut state, "Delete group");
+    assert!(matches!(
+        endpoint_methods(&deleted)[..],
+        [crate::api::schema::Method::AgentGroupDelete(params)] if params.group == "g2"
+    ));
+
+    state.compose(106, 30).expect("grouped agent sidebar");
+    let parked_header = state.hits.agent_sections[2].0;
+    click(&mut state, parked_header, MouseButton::Right);
+    choose(&mut state, "Rename group");
+    let Some(ClientShellOverlay::Rename(rename)) = state.overlay.as_mut() else {
+        panic!("rename should prompt for a name");
+    };
+    rename.input = TextEditor::new("later", false);
+    let mut renamed = ClientShellInput::default();
+    state.save_rename_overlay(&mut renamed);
+    assert!(matches!(
+        endpoint_methods(&renamed)[..],
+        [crate::api::schema::Method::AgentGroupRename(params)]
+            if params.group == "g2" && params.label == "later"
+    ));
+}
+
+#[test]
+fn blank_agent_space_offers_a_new_group_and_the_keybinding_opens_the_agent_menu() {
+    let mut projected = snapshot();
+    projected.agents = vec![grouped_agent("pane_1", AgentStatus::Idle, None, true)];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("agent sidebar");
+
+    let body = state.hits.agent_body;
+    let blank = Rect::new(body.x, body.bottom().saturating_sub(1), body.width, 1);
+    click(&mut state, blank, MouseButton::Right);
+    assert_eq!(menu_labels(&state), ["New agent group..."]);
+    state.overlay = None;
+
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::AgentMenu),
+        &mut ClientShellInput::default(),
+    );
+    assert_eq!(
+        menu_labels(&state),
+        ["Focus", "New agent group...", "Rename pane"]
+    );
+}
+
+#[test]
+fn agent_menu_omits_grouping_for_servers_without_group_methods() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(grouped_agents_snapshot()));
     state.set_endpoint_methods(Some(vec!["pane.focus".into(), "pane.rename".into()]));
     state.open_agent_context_menu("pane_1".into(), 1, 1);
-    let items = match state.overlay.as_ref() {
-        Some(ClientShellOverlay::ContextMenu(menu)) => menu.items(),
-        _ => panic!("agent context menu"),
-    };
-    assert!(items
-        .iter()
-        .all(|item| item.action != ClientContextMenuAction::ToggleArchived));
+    assert_eq!(menu_labels(&state), ["Focus", "Rename pane"]);
+    state.overlay = None;
+    state.open_agent_panel_context_menu(1, 1);
+    assert!(state.overlay.is_none());
 }
 
 #[test]
-fn next_agent_skips_a_collapsed_archived_section() {
+fn next_agent_skips_collapsed_groups() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
-    let mut projected = sectioned_agents_snapshot();
-    let mut third_pane = projected.panes[0].clone();
-    third_pane.pane_id = "pane_3".into();
-    third_pane.focused = false;
-    projected.panes.push(third_pane);
-    projected.agents.insert(
-        1,
-        sectioned_agent("pane_3", AgentStatus::Working, false, false),
-    );
-    state.set_snapshot(Box::new(projected));
+    state.set_snapshot(Box::new(grouped_agents_snapshot()));
+    state.agent_sections.toggle(&Some("g1".to_owned()));
 
     let mut next = ClientShellInput::default();
     state.record_binding(
         crate::input::KeybindMatch::Action(crate::input::KeybindAction::NextAgent),
         &mut next,
     );
-    let mut wrapped = ClientShellInput::default();
-    state.record_binding(
-        crate::input::KeybindMatch::Action(crate::input::KeybindAction::FocusAgent(2)),
-        &mut wrapped,
-    );
-    let [ClientShellAction::Endpoint { request, .. }] = &next.actions[..] else {
-        panic!("next agent should use the endpoint API");
-    };
     assert!(matches!(
-        &request.method,
-        crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_3"
+        endpoint_methods(&next)[..],
+        [crate::api::schema::Method::PaneFocus(target)] if target.pane_id == "pane_2"
     ));
-    assert!(!wrapped
-        .actions
-        .iter()
-        .any(|action| matches!(action, ClientShellAction::Endpoint { .. })));
     assert!(
         !state.indexed_navigation_target_exists(&crate::input::KeybindMatch::Action(
             crate::input::KeybindAction::FocusAgent(2)

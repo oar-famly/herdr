@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+mod agent_groups;
 mod agent_view;
 mod agents;
 mod env;
@@ -1188,8 +1189,19 @@ impl App {
                 return self.handle_pane_link_activate(request.id, params);
             }
             Method::PaneRename(params) => return self.handle_pane_rename(request.id, params),
-            Method::PaneArchiveSet(params) => {
-                return self.handle_pane_archive_set(request.id, params);
+            Method::PaneGroupSet(params) => return self.handle_pane_group_set(request.id, params),
+            Method::AgentGroupList(_) => return self.handle_agent_group_list(request.id),
+            Method::AgentGroupCreate(params) => {
+                return self.handle_agent_group_create(request.id, params);
+            }
+            Method::AgentGroupRename(params) => {
+                return self.handle_agent_group_rename(request.id, params);
+            }
+            Method::AgentGroupMove(params) => {
+                return self.handle_agent_group_move(request.id, params);
+            }
+            Method::AgentGroupDelete(params) => {
+                return self.handle_agent_group_delete(request.id, params);
             }
             Method::PaneRead(params) => return self.handle_pane_read(request.id, params),
             Method::PaneReportAgent(params) => {

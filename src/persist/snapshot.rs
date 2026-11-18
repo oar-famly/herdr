@@ -26,6 +26,11 @@ pub struct SessionSnapshot {
     pub sidebar_section_split: Option<f32>,
     #[serde(default)]
     pub collapsed_space_keys: std::collections::HashSet<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::agent_groups::AgentGroups::is_empty"
+    )]
+    pub agent_groups: crate::agent_groups::AgentGroups,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -111,12 +116,10 @@ pub struct PaneSnapshot {
     pub agent_resume: Option<PaneAgentResumeSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_argv: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub archived: bool,
-}
-
-fn is_false(value: &bool) -> bool {
-    !*value
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_group: Option<String>,
+    #[serde(default, rename = "archived", skip_serializing)]
+    pub legacy_archived: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,6 +204,8 @@ struct RawSessionSnapshot {
     sidebar_section_split: Option<f32>,
     #[serde(default)]
     collapsed_space_keys: std::collections::HashSet<String>,
+    #[serde(default)]
+    agent_groups: crate::agent_groups::AgentGroups,
 }
 
 fn migrate_snapshot(raw: RawSessionSnapshot) -> Result<SessionSnapshot, String> {
@@ -216,6 +221,7 @@ fn migrate_snapshot(raw: RawSessionSnapshot) -> Result<SessionSnapshot, String> 
         sidebar_width: raw.sidebar_width,
         sidebar_section_split: raw.sidebar_section_split,
         collapsed_space_keys: raw.collapsed_space_keys,
+        agent_groups: raw.agent_groups,
     })
 }
 
@@ -287,6 +293,7 @@ pub fn capture(
         sidebar_width: None,
         sidebar_section_split: None,
         collapsed_space_keys: std::collections::HashSet::new(),
+        agent_groups: Default::default(),
     }
 }
 
@@ -394,7 +401,8 @@ fn capture_tab(
                 agent_session,
                 agent_resume,
                 launch_argv,
-                archived: terminal.is_some_and(|terminal| terminal.archived),
+                agent_group: terminal.and_then(|terminal| terminal.agent_group.clone()),
+                legacy_archived: false,
             },
         );
     }
@@ -670,6 +678,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
+            agent_groups: Default::default(),
         };
         let json = serde_json::to_string(&snap).unwrap();
         let restored = parse_snapshot(&json).unwrap();
@@ -702,18 +711,42 @@ mod tests {
     }
 
     #[test]
-    fn pane_snapshot_archived_is_optional_on_disk() {
-        let legacy: PaneSnapshot = serde_json::from_str(r#"{"cwd":"/tmp"}"#).unwrap();
-        assert!(!legacy.archived);
+    fn pane_snapshot_agent_group_is_optional_and_legacy_archive_is_read_only() {
+        let plain: PaneSnapshot = serde_json::from_str(r#"{"cwd":"/tmp"}"#).unwrap();
+        assert_eq!(plain.agent_group, None);
+        assert!(!plain.legacy_archived);
+        assert_eq!(serde_json::to_string(&plain).unwrap(), r#"{"cwd":"/tmp"}"#);
+
+        let legacy: PaneSnapshot =
+            serde_json::from_str(r#"{"cwd":"/tmp","archived":true}"#).unwrap();
+        assert!(legacy.legacy_archived);
         assert!(!serde_json::to_string(&legacy).unwrap().contains("archived"));
 
-        let archived = PaneSnapshot {
-            archived: true,
-            ..legacy
+        let grouped = PaneSnapshot {
+            agent_group: Some("g1".into()),
+            ..plain
         };
         let decoded: PaneSnapshot =
-            serde_json::from_str(&serde_json::to_string(&archived).unwrap()).unwrap();
-        assert!(decoded.archived);
+            serde_json::from_str(&serde_json::to_string(&grouped).unwrap()).unwrap();
+        assert_eq!(decoded.agent_group.as_deref(), Some("g1"));
+    }
+
+    #[test]
+    fn session_snapshot_agent_groups_are_optional_on_disk() {
+        let mut snapshot = migrate_snapshot(
+            serde_json::from_str(r#"{"version":3,"workspaces":[],"active":null,"selected":0}"#)
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(snapshot.agent_groups.is_empty());
+        assert!(!serde_json::to_string(&snapshot)
+            .unwrap()
+            .contains("agent_groups"));
+
+        snapshot.agent_groups.create("reviews").unwrap();
+        let encoded = serde_json::to_string(&snapshot).unwrap();
+        let decoded = migrate_snapshot(serde_json::from_str(&encoded).unwrap()).unwrap();
+        assert_eq!(decoded.agent_groups, snapshot.agent_groups);
     }
 
     #[test]
@@ -729,7 +762,8 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
-                archived: false,
+                agent_group: None,
+                legacy_archived: false,
             },
         );
         panes.insert(
@@ -742,7 +776,8 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
-                archived: false,
+                agent_group: None,
+                legacy_archived: false,
             },
         );
 
@@ -776,6 +811,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
+            agent_groups: Default::default(),
             version: SNAPSHOT_VERSION,
         };
 
@@ -1429,7 +1465,8 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
-                archived: false,
+                agent_group: None,
+                legacy_archived: false,
             },
         );
         panes.insert(
@@ -1444,7 +1481,8 @@ mod tests {
                 agent_session: None,
                 agent_resume: None,
                 launch_argv: None,
-                archived: false,
+                agent_group: None,
+                legacy_archived: false,
             },
         );
 
@@ -1479,6 +1517,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
+            agent_groups: Default::default(),
         };
 
         let json = serde_json::to_string(&snap).unwrap();

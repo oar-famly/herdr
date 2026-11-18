@@ -50,7 +50,7 @@ pub(crate) fn render_collapsed_sidebar(
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
     selected_workspace_id: Option<&str>,
-    agent_sections: super::super::agent_sidebar::AgentSectionsCollapsed,
+    agent_sections: &super::super::agent_sidebar::AgentSectionsCollapsed,
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
@@ -139,8 +139,9 @@ pub(crate) fn render_collapsed_sidebar(
         .collect::<Vec<_>>();
     let entries = super::super::agent_sidebar::agent_panel_entries(
         &agents,
-        |agent| agent.archived,
+        |agent| agent.agent_group.as_deref(),
         |agent| agent.agent_status,
+        &snapshot.agent_groups,
         agent_sections,
     );
     let mut index = 0;
@@ -158,7 +159,7 @@ pub(crate) fn render_collapsed_sidebar(
         let agent = match entry {
             super::super::agent_sidebar::AgentPanelEntry::Header(header) => {
                 super::super::agent_sidebar::render_compact_section_header(
-                    buffer, rect, *header, config, hits,
+                    buffer, rect, header, config, hits,
                 );
                 continue;
             }

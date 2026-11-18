@@ -948,6 +948,8 @@ pub struct ClientShellSnapshot {
     pub panes: Vec<ClientShellPane>,
     pub agents: Vec<ClientShellAgent>,
     pub commands: Vec<ClientShellCommand>,
+    #[serde(default)]
+    pub agent_groups: Vec<ClientShellAgentGroup>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1084,7 +1086,13 @@ pub struct ClientShellAgent {
     pub tokens: Vec<(String, String)>,
     pub focused: bool,
     #[serde(default)]
-    pub archived: bool,
+    pub agent_group: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClientShellAgentGroup {
+    pub group_id: String,
+    pub label: String,
 }
 
 /// Origin-relative geometry for one pane in a rendered pane surface.
@@ -2819,6 +2827,7 @@ mod tests {
             tab_bar_right_separator: " · ".into(),
             agent_view_label: None,
             agent_order: Vec::new(),
+            agent_groups: Vec::new(),
             workspaces: vec![ClientShellWorkspace {
                 workspace_id: "w1".into(),
                 active_tab_id: "w1:t1".into(),

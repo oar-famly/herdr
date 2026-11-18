@@ -437,8 +437,17 @@ impl Leaf {
     }
 }
 
-fn archive_method(matches: &clap::ArgMatches, archived: bool) -> Result<Method, ParseError> {
-    let mut params = PaneArchiveProjection::from_matches(matches)?;
+fn group_method(matches: &clap::ArgMatches, assign: bool) -> Result<Method, ParseError> {
+    let mut params = PaneGroupProjection::from_matches(matches)?;
+    match (assign, params.group.is_some()) {
+        (true, false) => return Err(ParseError::Usage("--to GROUP is required".into())),
+        (false, true) => {
+            return Err(ParseError::Usage(
+                "ungroup does not take --to; use `herdr pane group --to GROUP`".into(),
+            ))
+        }
+        _ => {}
+    }
     let explicit = (!params.pane_id.is_empty()).then(|| params.pane_id.clone());
     params.pane_id = super::caller_target(
         matches,
@@ -448,8 +457,7 @@ fn archive_method(matches: &clap::ArgMatches, archived: bool) -> Result<Method, 
         true,
     )?
     .ok_or_else(|| ParseError::Usage("pass PANE_ID, --pane, or run inside a herdr pane".into()))?;
-    params.archived = archived;
-    Ok(Method::PaneArchiveSet(params))
+    Ok(Method::PaneGroupSet(params))
 }
 
 macro_rules! leaf {
@@ -627,20 +635,20 @@ pub(super) const LEAVES: &[Leaf] = &[
         },
     },
     Leaf {
-        name: "archive",
-        about: "Move a pane's agent to the Archived section of the agents panel",
-        id: "cli:pane:archive",
+        name: "group",
+        about: "File a pane's agent under an agent group",
+        id: "cli:pane:group",
         output: Output::Json,
-        arguments: PaneArchiveProjection::arguments,
-        method: |matches| archive_method(matches, true),
+        arguments: PaneGroupProjection::arguments,
+        method: |matches| group_method(matches, true),
     },
     Leaf {
-        name: "unarchive",
-        about: "Move a pane's agent back to the Active section of the agents panel",
-        id: "cli:pane:unarchive",
+        name: "ungroup",
+        about: "Return a pane's agent to the default agent section",
+        id: "cli:pane:ungroup",
         output: Output::Json,
-        arguments: PaneArchiveProjection::arguments,
-        method: |matches| archive_method(matches, false),
+        arguments: PaneGroupProjection::arguments,
+        method: |matches| group_method(matches, false),
     },
     Leaf {
         name: "split",

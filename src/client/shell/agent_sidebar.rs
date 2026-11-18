@@ -14,67 +14,56 @@ pub(super) struct AgentRow {
     pub(super) pane_id: String,
     pub(super) status: crate::api::schema::AgentStatus,
     pub(super) focused: bool,
-    pub(super) archived: bool,
+    pub(super) agent_group: Option<String>,
     pub(super) rows: Vec<Vec<crate::ui::ResolvedToken>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum AgentSection {
-    Active,
-    Archived,
-}
+/// An agent panel section: a user-defined group, or `None` for the default section
+/// holding every agent that is not filed into a group.
+pub(super) type AgentSection = Option<String>;
 
-impl AgentSection {
-    fn of(archived: bool) -> Self {
-        if archived {
-            Self::Archived
-        } else {
-            Self::Active
-        }
-    }
+pub(super) const DEFAULT_SECTION_LABEL: &str = "active";
 
-    fn label(self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Archived => "archived",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct AgentSectionsCollapsed {
-    pub(super) active: bool,
-    pub(super) archived: bool,
-}
-
-impl Default for AgentSectionsCollapsed {
-    fn default() -> Self {
-        Self {
-            active: false,
-            archived: true,
-        }
-    }
+    collapsed: std::collections::HashSet<AgentSection>,
 }
 
 impl AgentSectionsCollapsed {
-    pub(super) fn is_collapsed(self, section: AgentSection) -> bool {
-        match section {
-            AgentSection::Active => self.active,
-            AgentSection::Archived => self.archived,
+    pub(super) fn from_keys(keys: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            collapsed: keys
+                .into_iter()
+                .map(|key| (!key.is_empty()).then_some(key))
+                .collect(),
         }
     }
 
-    pub(super) fn toggle(&mut self, section: AgentSection) {
-        match section {
-            AgentSection::Active => self.active = !self.active,
-            AgentSection::Archived => self.archived = !self.archived,
+    pub(super) fn keys(&self) -> Vec<String> {
+        let mut keys = self
+            .collapsed
+            .iter()
+            .map(|section| section.clone().unwrap_or_default())
+            .collect::<Vec<_>>();
+        keys.sort();
+        keys
+    }
+
+    pub(super) fn is_collapsed(&self, section: &AgentSection) -> bool {
+        self.collapsed.contains(section)
+    }
+
+    pub(super) fn toggle(&mut self, section: &AgentSection) {
+        if !self.collapsed.remove(section) {
+            self.collapsed.insert(section.clone());
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct AgentSectionHeader {
     pub(super) section: AgentSection,
+    pub(super) label: String,
     pub(super) count: usize,
     pub(super) collapsed: bool,
     pub(super) status: Option<crate::api::schema::AgentStatus>,
@@ -85,36 +74,61 @@ pub(super) enum AgentPanelEntry<'a, T> {
     Row(&'a T),
 }
 
-/// Sections appear only once something is archived. A collapsed header carries the
-/// most urgent status of the agents it hides.
+fn section_of(
+    groups: &[crate::protocol::ClientShellAgentGroup],
+    group: Option<&str>,
+) -> AgentSection {
+    group
+        .filter(|group| groups.iter().any(|candidate| candidate.group_id == *group))
+        .map(str::to_owned)
+}
+
+pub(super) fn section_rank(
+    groups: &[crate::protocol::ClientShellAgentGroup],
+    group: Option<&str>,
+) -> usize {
+    group
+        .and_then(|group| {
+            groups
+                .iter()
+                .position(|candidate| candidate.group_id == group)
+        })
+        .map_or(0, |index| index + 1)
+}
+
+/// Sections appear only once a group exists. Every group gets a header, even when
+/// empty, carrying the most urgent status of its agents.
 pub(super) fn agent_panel_entries<'a, T>(
     rows: &'a [T],
-    archived: impl Fn(&T) -> bool,
+    group_of: impl Fn(&T) -> Option<&str>,
     status: impl Fn(&T) -> crate::api::schema::AgentStatus,
-    collapsed: AgentSectionsCollapsed,
+    groups: &[crate::protocol::ClientShellAgentGroup],
+    collapsed: &AgentSectionsCollapsed,
 ) -> Vec<AgentPanelEntry<'a, T>> {
-    if !rows.iter().any(&archived) {
+    if groups.is_empty() {
         return rows.iter().map(AgentPanelEntry::Row).collect();
     }
-    let mut entries = Vec::with_capacity(rows.len() + 2);
-    for section in [AgentSection::Active, AgentSection::Archived] {
+    let sections = std::iter::once((None, DEFAULT_SECTION_LABEL.to_owned())).chain(
+        groups
+            .iter()
+            .map(|group| (Some(group.group_id.clone()), group.label.clone())),
+    );
+    let mut entries = Vec::with_capacity(rows.len() + groups.len() + 1);
+    for (section, label) in sections {
         let members = rows
             .iter()
-            .filter(|row| AgentSection::of(archived(row)) == section)
+            .filter(|row| section_of(groups, group_of(row)) == section)
             .collect::<Vec<_>>();
-        let is_collapsed = collapsed.is_collapsed(section);
+        let is_collapsed = collapsed.is_collapsed(&section);
         entries.push(AgentPanelEntry::Header(AgentSectionHeader {
+            status: members
+                .iter()
+                .map(|row| status(row))
+                .max_by_key(|status| status_priority(*status)),
             section,
+            label,
             count: members.len(),
             collapsed: is_collapsed,
-            status: is_collapsed
-                .then(|| {
-                    members
-                        .iter()
-                        .map(|row| status(row))
-                        .max_by_key(|status| status_priority(*status))
-                })
-                .flatten(),
         }));
         if !is_collapsed {
             entries.extend(members.into_iter().map(AgentPanelEntry::Row));
@@ -125,33 +139,47 @@ pub(super) fn agent_panel_entries<'a, T>(
 
 pub(super) fn visible_in_sections<T>(
     items: Vec<T>,
-    archived: impl Fn(&T) -> bool,
-    collapsed: AgentSectionsCollapsed,
+    group_of: impl Fn(&T) -> Option<String>,
+    groups: &[crate::protocol::ClientShellAgentGroup],
+    collapsed: &AgentSectionsCollapsed,
 ) -> Vec<T> {
-    if !items.iter().any(&archived) {
+    if groups.is_empty() {
         return items;
     }
     items
         .into_iter()
-        .filter(|item| !collapsed.is_collapsed(AgentSection::of(archived(item))))
+        .filter(|item| !collapsed.is_collapsed(&section_of(groups, group_of(item).as_deref())))
         .collect()
 }
 
-fn agent_is_archived(snapshot: &ClientShellSnapshot, pane_id: &str) -> bool {
+pub(super) fn active_agent_groups<'a>(
+    endpoints: &'a [ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+) -> &'a [crate::protocol::ClientShellAgentGroup] {
+    endpoints
+        .iter()
+        .find(|endpoint| &endpoint.endpoint_id == active_endpoint_id)
+        .and_then(|endpoint| endpoint.snapshot.as_deref())
+        .map_or(&[], |snapshot| snapshot.agent_groups.as_slice())
+}
+
+fn agent_group_of(snapshot: &ClientShellSnapshot, pane_id: &str) -> Option<String> {
     snapshot
         .agents
         .iter()
-        .any(|agent| agent.pane_id == pane_id && agent.archived)
+        .find(|agent| agent.pane_id == pane_id)
+        .and_then(|agent| agent.agent_group.clone())
 }
 
 pub(super) fn visible_agent_pane_ids(
     snapshot: &ClientShellSnapshot,
     sort: crate::config::AgentPanelSortConfig,
-    collapsed: AgentSectionsCollapsed,
+    collapsed: &AgentSectionsCollapsed,
 ) -> Vec<String> {
     visible_in_sections(
         ordered_agent_pane_ids(snapshot, sort),
-        |pane_id| agent_is_archived(snapshot, pane_id),
+        |pane_id| agent_group_of(snapshot, pane_id),
+        &snapshot.agent_groups,
         collapsed,
     )
 }
@@ -159,28 +187,35 @@ pub(super) fn visible_agent_pane_ids(
 pub(super) fn agent_panel_entry_index(
     snapshot: &ClientShellSnapshot,
     sort: crate::config::AgentPanelSortConfig,
-    collapsed: AgentSectionsCollapsed,
+    collapsed: &AgentSectionsCollapsed,
     pane_id: &str,
 ) -> Option<usize> {
-    let ids = ordered_agent_pane_ids(snapshot, sort);
+    let ids = ordered_agent_pane_ids(snapshot, sort)
+        .into_iter()
+        .map(|id| {
+            let group = agent_group_of(snapshot, &id);
+            (id, group)
+        })
+        .collect::<Vec<_>>();
     agent_panel_entries(
         &ids,
-        |pane_id| agent_is_archived(snapshot, pane_id),
+        |(_, group)| group.as_deref(),
         |_| crate::api::schema::AgentStatus::Unknown,
+        &snapshot.agent_groups,
         collapsed,
     )
     .iter()
-    .position(|entry| matches!(entry, AgentPanelEntry::Row(id) if id.as_str() == pane_id))
+    .position(|entry| matches!(entry, AgentPanelEntry::Row((id, _)) if id.as_str() == pane_id))
 }
 
 pub(super) fn agent_entry_gaps<T>(entries: &[AgentPanelEntry<'_, T>], row_gap: u16) -> Vec<u16> {
     entries
         .iter()
         .zip(entries.iter().skip(1).map(Some).chain([None]))
-        .map(|(entry, next)| match (entry, next) {
-            (_, None) => 0,
-            (_, Some(AgentPanelEntry::Header(_))) => row_gap.max(1),
-            (_, Some(AgentPanelEntry::Row(_))) => row_gap,
+        .map(|(_, next)| match next {
+            None => 0,
+            Some(AgentPanelEntry::Header(_)) => row_gap.max(1),
+            Some(AgentPanelEntry::Row(_)) => row_gap,
         })
         .collect()
 }
@@ -212,7 +247,7 @@ pub(super) fn ordered_agent_pane_ids(
         }
         agents
     };
-    agents.sort_by_key(|agent| agent.archived);
+    agents.sort_by_key(|agent| section_rank(&snapshot.agent_groups, agent.agent_group.as_deref()));
     agents
         .into_iter()
         .map(|agent| agent.pane_id.clone())
@@ -224,7 +259,7 @@ pub(super) fn render_agent_panel(
     area: Rect,
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
-    sections: AgentSectionsCollapsed,
+    sections: &AgentSectionsCollapsed,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -239,7 +274,13 @@ pub(super) fn render_agent_panel(
     }
 
     let rows = agent_rows(snapshot, config, None);
-    let entries = agent_panel_entries(&rows, |row| row.archived, |row| row.status, sections);
+    let entries = agent_panel_entries(
+        &rows,
+        |row| row.agent_group.as_deref(),
+        |row| row.status,
+        &snapshot.agent_groups,
+        sections,
+    );
     render_agent_list(
         buffer,
         area,
@@ -384,7 +425,7 @@ pub(super) fn render_agent_list<T>(
         let rect = Rect::new(body.x, y, content_width, height);
         match entry {
             AgentPanelEntry::Header(header) => {
-                render_section_header(buffer, rect, *header, config, hits)
+                render_section_header(buffer, rect, header, config, hits)
             }
             AgentPanelEntry::Row(row) => render_row(buffer, rect, row, hits),
         }
@@ -401,21 +442,19 @@ pub(super) fn render_agent_list<T>(
 pub(super) fn render_section_header(
     buffer: &mut Buffer,
     rect: Rect,
-    header: AgentSectionHeader,
+    header: &AgentSectionHeader,
     config: &ClientShellConfig,
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
+    let status = header
+        .status
+        .unwrap_or(crate::api::schema::AgentStatus::Unknown);
     let mut spans = vec![
+        ratatui::text::Span::raw(" "),
         ratatui::text::Span::styled(
-            format!(
-                " {} {}",
-                if header.collapsed { "▸" } else { "▾" },
-                header.section.label()
-            ),
-            Style::default()
-                .fg(palette.overlay0)
-                .add_modifier(Modifier::BOLD),
+            status_icon(status, config.status_indicators),
+            Style::default().fg(status_color(status, palette)),
         ),
         ratatui::text::Span::styled(
             format!(" {}", header.count),
@@ -423,15 +462,20 @@ pub(super) fn render_section_header(
                 .fg(palette.overlay0)
                 .add_modifier(Modifier::DIM),
         ),
+        ratatui::text::Span::styled(
+            format!(" {}", header.label),
+            Style::default()
+                .fg(palette.overlay0)
+                .add_modifier(Modifier::BOLD),
+        ),
     ];
-    if let Some(status) = header.status {
-        spans.push(ratatui::text::Span::styled(
-            format!(" {}", status_icon(status, config.status_indicators)),
-            Style::default().fg(status_color(status, palette)),
-        ));
-    }
+    let toggle = ratatui::text::Span::styled(
+        format!(" {}", if header.collapsed { "▸" } else { "▾" }),
+        Style::default().fg(palette.accent),
+    );
     let used = spans
         .iter()
+        .chain([&toggle])
         .map(|span| display_width(&span.content))
         .sum::<usize>();
     let rule = (rect.width as usize).saturating_sub(used + 1);
@@ -441,17 +485,20 @@ pub(super) fn render_section_header(
             Style::default().fg(palette.surface_dim),
         ));
     }
+    if (rect.width as usize) >= used {
+        spans.push(toggle);
+    }
     let line = Rect::new(rect.x, rect.y, rect.width, 1);
     Paragraph::new(Line::from(spans)).render(line, buffer);
     if config.mouse_capture {
-        hits.agent_sections.push((line, header.section));
+        hits.agent_sections.push((line, header.section.clone()));
     }
 }
 
 pub(super) fn render_compact_section_header(
     buffer: &mut Buffer,
     rect: Rect,
-    header: AgentSectionHeader,
+    header: &AgentSectionHeader,
     config: &ClientShellConfig,
     hits: &mut ShellHitMap,
 ) {
@@ -474,7 +521,7 @@ pub(super) fn render_compact_section_header(
         );
     }
     if config.mouse_capture {
-        hits.agent_sections.push((rect, header.section));
+        hits.agent_sections.push((rect, header.section.clone()));
     }
 }
 
@@ -558,7 +605,7 @@ pub(super) fn agent_row(
         pane_id: agent.pane_id.clone(),
         status: agent.agent_status,
         focused: agent.focused,
-        archived: agent.archived,
+        agent_group: agent.agent_group.clone(),
         rows,
     })
 }
@@ -644,32 +691,46 @@ fn sidebar_status_text(status: crate::api::schema::AgentStatus) -> &'static str 
 mod tests {
     use super::*;
     use crate::api::schema::AgentStatus;
+    use crate::protocol::ClientShellAgentGroup;
 
-    type Row = (&'static str, bool, AgentStatus);
+    type Row = (&'static str, Option<&'static str>, AgentStatus);
+
+    fn groups() -> Vec<ClientShellAgentGroup> {
+        ["reviews", "parked"]
+            .iter()
+            .enumerate()
+            .map(|(index, label)| ClientShellAgentGroup {
+                group_id: format!("g{}", index + 1),
+                label: (*label).into(),
+            })
+            .collect()
+    }
 
     fn rows() -> Vec<Row> {
         vec![
-            ("a", false, AgentStatus::Idle),
-            ("b", true, AgentStatus::Working),
-            ("c", false, AgentStatus::Working),
-            ("d", true, AgentStatus::Blocked),
+            ("a", None, AgentStatus::Idle),
+            ("b", Some("g2"), AgentStatus::Working),
+            ("c", Some("gone"), AgentStatus::Working),
+            ("d", Some("g2"), AgentStatus::Blocked),
+            ("e", Some("g1"), AgentStatus::Idle),
         ]
     }
 
-    fn expanded() -> AgentSectionsCollapsed {
-        AgentSectionsCollapsed {
-            active: false,
-            archived: false,
-        }
+    fn collapsed(keys: &[&str]) -> AgentSectionsCollapsed {
+        AgentSectionsCollapsed::from_keys(keys.iter().map(|key| (*key).to_owned()))
     }
 
-    fn render(rows: &[Row], collapsed: AgentSectionsCollapsed) -> Vec<String> {
-        agent_panel_entries(rows, |row| row.1, |row| row.2, collapsed)
+    fn render(
+        rows: &[Row],
+        groups: &[ClientShellAgentGroup],
+        collapsed: &AgentSectionsCollapsed,
+    ) -> Vec<String> {
+        agent_panel_entries(rows, |row| row.1, |row| row.2, groups, collapsed)
             .into_iter()
             .map(|entry| match entry {
                 AgentPanelEntry::Header(header) => format!(
                     "[{} {}{} {:?}]",
-                    header.section.label(),
+                    header.label,
                     header.count,
                     if header.collapsed { " collapsed" } else { "" },
                     header.status
@@ -679,101 +740,89 @@ mod tests {
             .collect()
     }
 
-    fn names(rows: Vec<Row>) -> Vec<&'static str> {
-        rows.into_iter().map(|row| row.0).collect()
-    }
-
     #[test]
-    fn panel_has_no_sections_until_something_is_archived() {
-        let active = vec![("a", false, AgentStatus::Idle)];
-        assert_eq!(render(&active, AgentSectionsCollapsed::default()), ["a"]);
-        let all_collapsed = AgentSectionsCollapsed {
-            active: true,
-            archived: true,
-        };
+    fn panel_has_no_sections_until_a_group_exists() {
         assert_eq!(
-            names(visible_in_sections(active, |row| row.1, all_collapsed)),
-            ["a"]
+            render(&rows(), &[], &collapsed(&[""])),
+            ["a", "b", "c", "d", "e"]
         );
     }
 
     #[test]
-    fn archived_section_starts_collapsed_with_its_most_urgent_status() {
+    fn sections_follow_group_order_and_unknown_groups_fall_back_to_active() {
         assert_eq!(
-            render(&rows(), AgentSectionsCollapsed::default()),
+            render(&rows(), &groups(), &AgentSectionsCollapsed::default()),
             [
-                "[active 2 None]",
+                "[active 2 Some(Working)]",
                 "a",
                 "c",
-                "[archived 2 collapsed Some(Blocked)]"
-            ]
-        );
-        assert_eq!(
-            names(visible_in_sections(
-                rows(),
-                |row| row.1,
-                AgentSectionsCollapsed::default()
-            )),
-            ["a", "c"]
-        );
-    }
-
-    #[test]
-    fn expanded_sections_keep_the_existing_order_within_each_section() {
-        assert_eq!(
-            render(&rows(), expanded()),
-            ["[active 2 None]", "a", "c", "[archived 2 None]", "b", "d"]
-        );
-    }
-
-    #[test]
-    fn a_collapsed_active_section_hides_its_agents_from_navigation() {
-        let only_archived = AgentSectionsCollapsed {
-            active: true,
-            archived: false,
-        };
-        assert_eq!(
-            render(&rows(), only_archived),
-            [
-                "[active 2 collapsed Some(Working)]",
-                "[archived 2 None]",
+                "[reviews 1 Some(Idle)]",
+                "e",
+                "[parked 2 Some(Blocked)]",
                 "b",
                 "d"
             ]
         );
+    }
+
+    #[test]
+    fn empty_groups_still_get_a_header() {
+        let rows = vec![("a", None, AgentStatus::Idle)];
         assert_eq!(
-            names(visible_in_sections(rows(), |row| row.1, only_archived)),
-            ["b", "d"]
+            render(&rows, &groups(), &AgentSectionsCollapsed::default()),
+            [
+                "[active 1 Some(Idle)]",
+                "a",
+                "[reviews 0 None]",
+                "[parked 0 None]"
+            ]
         );
     }
 
     #[test]
-    fn a_blank_line_separates_the_sections_but_not_a_title_from_its_agents() {
-        let rows = rows();
-        let entries = agent_panel_entries(&rows, |row| row.1, |row| row.2, expanded());
-        assert_eq!(agent_entry_gaps(&entries, 0), [0, 0, 1, 0, 0, 0]);
-        assert_eq!(agent_entry_gaps(&entries, 2), [2, 2, 2, 2, 2, 0]);
-
-        let only_archived = AgentSectionsCollapsed {
-            active: true,
-            archived: false,
-        };
-        let entries = agent_panel_entries(&rows, |row| row.1, |row| row.2, only_archived);
-        assert_eq!(agent_entry_gaps(&entries, 0), [1, 0, 0, 0]);
+    fn sections_show_their_most_urgent_status_and_collapsed_ones_hide_from_navigation() {
+        let state = collapsed(&["g2", ""]);
+        assert_eq!(
+            render(&rows(), &groups(), &state),
+            [
+                "[active 2 collapsed Some(Working)]",
+                "[reviews 1 Some(Idle)]",
+                "e",
+                "[parked 2 collapsed Some(Blocked)]"
+            ]
+        );
+        assert_eq!(
+            visible_in_sections(rows(), |row| row.1.map(str::to_owned), &groups(), &state)
+                .iter()
+                .map(|row| row.0)
+                .collect::<Vec<_>>(),
+            ["e"]
+        );
     }
 
     #[test]
-    fn sectionless_panels_keep_the_configured_row_gap() {
-        let rows = vec![
-            ("a", false, AgentStatus::Idle),
-            ("b", false, AgentStatus::Idle),
-        ];
+    fn collapse_state_round_trips_through_preference_keys() {
+        let mut state = AgentSectionsCollapsed::default();
+        state.toggle(&None);
+        state.toggle(&Some("g2".into()));
+        state.toggle(&Some("g2".into()));
+        state.toggle(&Some("g1".into()));
+        assert_eq!(state.keys(), ["", "g1"]);
+        assert_eq!(AgentSectionsCollapsed::from_keys(state.keys()), state);
+    }
+
+    #[test]
+    fn a_blank_line_separates_sections_but_not_a_title_from_its_agents() {
+        let rows = rows();
+        let groups = groups();
         let entries = agent_panel_entries(
             &rows,
             |row| row.1,
             |row| row.2,
-            AgentSectionsCollapsed::default(),
+            &groups,
+            &AgentSectionsCollapsed::default(),
         );
-        assert_eq!(agent_entry_gaps(&entries, 0), [0, 0]);
+        assert_eq!(agent_entry_gaps(&entries, 0), [0, 0, 1, 0, 1, 0, 0, 0]);
+        assert_eq!(agent_entry_gaps(&entries, 2), [2, 2, 2, 2, 2, 2, 2, 0]);
     }
 }

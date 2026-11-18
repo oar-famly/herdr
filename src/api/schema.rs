@@ -145,7 +145,12 @@ operations::define_operations! {
     PluginPaneOpen(PluginPaneOpenParams) => "plugin.pane.open", true, false;
     PluginPaneFocus(PluginPaneFocusParams) => "plugin.pane.focus", true, false;
     PluginPaneClose(PluginPaneCloseParams) => "plugin.pane.close", true, false;
-    PaneArchiveSet(PaneArchiveSetParams) => "pane.archive.set", true, true;
+    AgentGroupList(EmptyParams) => "agent.group.list", false, false;
+    AgentGroupCreate(AgentGroupCreateParams) => "agent.group.create", true, true;
+    AgentGroupRename(AgentGroupRenameParams) => "agent.group.rename", true, true;
+    AgentGroupMove(AgentGroupMoveParams) => "agent.group.move", true, true;
+    AgentGroupDelete(AgentGroupTarget) => "agent.group.delete", true, true;
+    PaneGroupSet(PaneGroupSetParams) => "pane.group.set", true, true;
 }
 
 #[cfg(test)]

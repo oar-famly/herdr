@@ -351,7 +351,7 @@ impl App {
                 .map(|cwd| cwd.display().to_string()),
             restore_error: terminal.restore_error.clone(),
             label: terminal.manual_label.clone(),
-            archived: terminal.archived,
+            agent_group: terminal.agent_group.clone(),
             agent: terminal.effective_agent_label().map(str::to_string),
             title: presentation.title,
             terminal_title: terminal.terminal_title.clone(),

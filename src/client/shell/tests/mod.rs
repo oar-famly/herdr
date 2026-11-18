@@ -27,6 +27,7 @@ pub(super) fn snapshot() -> ClientShellSnapshot {
         tab_bar_right_separator: " ".into(),
         agent_view_label: None,
         agent_order: Vec::new(),
+        agent_groups: Vec::new(),
         workspaces: vec![ClientShellWorkspace {
             workspace_id: "ws_1".into(),
             active_tab_id: "tab_1".into(),
@@ -185,7 +186,7 @@ fn pane_scroll_result(
             foreground_cwd: None,
             restore_error: None,
             label: None,
-            archived: false,
+            agent_group: None,
             agent: None,
             title: None,
             terminal_title: None,

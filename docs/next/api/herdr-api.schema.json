@@ -765,6 +765,12 @@
                 "null"
               ]
             },
+            "agent_group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "agent_session": {
               "anyOf": [
                 {
@@ -777,9 +783,6 @@
             },
             "agent_status": {
               "$ref": "#/schemas/event/$defs/AgentStatus"
-            },
-            "archived": {
-              "type": "boolean"
             },
             "cwd": {
               "type": [
@@ -1231,6 +1234,65 @@
     },
     "request": {
       "$defs": {
+        "AgentGroupCreateParams": {
+          "properties": {
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "label"
+          ],
+          "type": "object"
+        },
+        "AgentGroupMoveDirection": {
+          "enum": [
+            "up",
+            "down"
+          ],
+          "type": "string"
+        },
+        "AgentGroupMoveParams": {
+          "properties": {
+            "direction": {
+              "$ref": "#/schemas/request/$defs/AgentGroupMoveDirection"
+            },
+            "group": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group",
+            "direction"
+          ],
+          "type": "object"
+        },
+        "AgentGroupRenameParams": {
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group",
+            "label"
+          ],
+          "type": "object"
+        },
+        "AgentGroupTarget": {
+          "properties": {
+            "group": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group"
+          ],
+          "type": "object"
+        },
         "AgentPromptParams": {
           "properties": {
             "target": {
@@ -2440,21 +2502,6 @@
           ],
           "type": "string"
         },
-        "PaneArchiveSetParams": {
-          "properties": {
-            "archived": {
-              "type": "boolean"
-            },
-            "pane_id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "pane_id",
-            "archived"
-          ],
-          "type": "object"
-        },
         "PaneClearAgentAuthorityParams": {
           "properties": {
             "pane_id": {
@@ -2613,6 +2660,23 @@
           },
           "required": [
             "direction"
+          ],
+          "type": "object"
+        },
+        "PaneGroupSetParams": {
+          "properties": {
+            "group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id"
           ],
           "type": "object"
         },
@@ -6334,11 +6398,91 @@
         {
           "properties": {
             "method": {
-              "const": "pane.archive.set",
+              "const": "agent.group.list",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/PaneArchiveSetParams"
+              "$ref": "#/schemas/request/$defs/EmptyParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "agent.group.create",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/AgentGroupCreateParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "agent.group.rename",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/AgentGroupRenameParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "agent.group.move",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/AgentGroupMoveParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "agent.group.delete",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/AgentGroupTarget"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.group.set",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneGroupSetParams"
             }
           },
           "required": [
@@ -6574,9 +6718,30 @@
     },
     "success_response": {
       "$defs": {
+        "AgentGroupInfo": {
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group_id",
+            "label"
+          ],
+          "type": "object"
+        },
         "AgentInfo": {
           "properties": {
             "agent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "agent_group": {
               "type": [
                 "string",
                 "null"
@@ -6594,9 +6759,6 @@
             },
             "agent_status": {
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
-            },
-            "archived": {
-              "type": "boolean"
             },
             "completion_seq": {
               "description": "The current idle transition completed work, independently of who has viewed it.",
@@ -7910,6 +8072,12 @@
                 "null"
               ]
             },
+            "agent_group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "agent_session": {
               "anyOf": [
                 {
@@ -7922,9 +8090,6 @@
             },
             "agent_status": {
               "$ref": "#/schemas/success_response/$defs/AgentStatus"
-            },
-            "archived": {
-              "type": "boolean"
             },
             "cwd": {
               "type": [
@@ -9548,6 +9713,41 @@
               "required": [
                 "type",
                 "agents"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "group": {
+                  "$ref": "#/schemas/success_response/$defs/AgentGroupInfo"
+                },
+                "type": {
+                  "const": "agent_group",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "group"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "groups": {
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/AgentGroupInfo"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "const": "agent_group_list",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "groups"
               ],
               "type": "object"
             },

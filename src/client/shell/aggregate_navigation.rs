@@ -59,7 +59,10 @@ pub(super) fn aggregate_agent_rows<'a>(
     sort: crate::config::AgentPanelSortConfig,
 ) -> Vec<AggregateAgentRow<'a>> {
     let mut rows = ordered_aggregate_agent_rows(endpoints, active_endpoint_id, sort);
-    rows.sort_by_key(|row| row.agent.archived);
+    let groups = super::agent_sidebar::active_agent_groups(endpoints, active_endpoint_id);
+    rows.sort_by_key(|row| {
+        super::agent_sidebar::section_rank(groups, row.agent.agent_group.as_deref())
+    });
     rows
 }
 
@@ -274,11 +277,12 @@ pub(super) fn online_agent_targets(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     sort: crate::config::AgentPanelSortConfig,
-    sections: super::agent_sidebar::AgentSectionsCollapsed,
+    sections: &super::agent_sidebar::AgentSectionsCollapsed,
 ) -> Vec<AggregateAgentTarget> {
     super::agent_sidebar::visible_in_sections(
         aggregate_agent_rows(endpoints, active_endpoint_id, sort),
-        |row| row.agent.archived,
+        |row| row.agent.agent_group.clone(),
+        super::agent_sidebar::active_agent_groups(endpoints, active_endpoint_id),
         sections,
     )
     .into_iter()

@@ -316,6 +316,13 @@ pub(super) enum ClientRenameTarget {
     Pane {
         pane_id: String,
     },
+    NewAgentGroup {
+        assign_pane_id: Option<String>,
+    },
+    AgentGroup {
+        group_id: String,
+        original_label: String,
+    },
 }
 
 #[derive(Debug)]
@@ -527,7 +534,11 @@ pub(super) enum ClientContextMenuAction {
     ToggleRightClickPassthrough,
     ClosePane,
     FocusAgent,
-    ToggleArchived,
+    MoveAgent(usize),
+    NewAgentGroup,
+    MoveAgentGroupUp,
+    MoveAgentGroupDown,
+    DeleteAgentGroup,
 }
 
 #[derive(Debug)]
@@ -553,9 +564,17 @@ pub(super) enum ClientContextMenuTarget {
     },
     Agent {
         pane_id: String,
-        archived: bool,
-        can_archive: bool,
+        destinations: Vec<(String, Option<String>)>,
+        can_group: bool,
     },
+    AgentGroup {
+        group: Option<String>,
+        label: String,
+        can_move_up: bool,
+        can_move_down: bool,
+        can_edit: bool,
+    },
+    AgentPanel,
 }
 
 #[derive(Debug)]
@@ -567,7 +586,7 @@ pub(super) struct ClientContextMenuOverlay {
 }
 
 pub(super) struct ClientContextMenuItem {
-    pub(super) label: &'static str,
+    pub(super) label: std::borrow::Cow<'static, str>,
     pub(super) action: ClientContextMenuAction,
 }
 
@@ -1065,17 +1084,9 @@ impl ClientShellState {
             tab_press: None,
             collapsed_groups: preferences.collapsed_groups.into_iter().collect(),
             remote_collapsed_groups,
-            agent_sections: {
-                let defaults = super::agent_sidebar::AgentSectionsCollapsed::default();
-                super::agent_sidebar::AgentSectionsCollapsed {
-                    active: preferences
-                        .active_agents_collapsed
-                        .unwrap_or(defaults.active),
-                    archived: preferences
-                        .archived_agents_collapsed
-                        .unwrap_or(defaults.archived),
-                }
-            },
+            agent_sections: super::agent_sidebar::AgentSectionsCollapsed::from_keys(
+                preferences.collapsed_agent_sections,
+            ),
             workspace_scroll: 0,
             agent_scroll: 0,
             pending_agent_reveal: None,

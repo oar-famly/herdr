@@ -7,17 +7,17 @@ pub(super) fn render_collapsed(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
-    sections: super::agent_sidebar::AgentSectionsCollapsed,
+    sections: &super::agent_sidebar::AgentSectionsCollapsed,
     hits: &mut ShellHitMap,
 ) {
     let rows = agent_rows(endpoints, active_endpoint_id, config);
-    let entries = panel_entries(&rows, sections);
+    let entries = panel_entries(&rows, endpoints, active_endpoint_id, sections);
     for (index, entry) in entries.iter().take(area.height as usize).enumerate() {
         let rect = Rect::new(area.x, area.y + index as u16, area.width, 1);
         let row = match entry {
             super::agent_sidebar::AgentPanelEntry::Header(header) => {
                 super::agent_sidebar::render_compact_section_header(
-                    buffer, rect, *header, config, hits,
+                    buffer, rect, header, config, hits,
                 );
                 continue;
             }
@@ -60,7 +60,7 @@ pub(super) fn render_expanded(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &ClientShellConfig,
-    sections: super::agent_sidebar::AgentSectionsCollapsed,
+    sections: &super::agent_sidebar::AgentSectionsCollapsed,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
 ) {
@@ -74,7 +74,7 @@ pub(super) fn render_expanded(
         return;
     }
     let rows = agent_rows(endpoints, active_endpoint_id, config);
-    let entries = panel_entries(&rows, sections);
+    let entries = panel_entries(&rows, endpoints, active_endpoint_id, sections);
     super::agent_sidebar::render_agent_list(
         buffer,
         area,
@@ -111,7 +111,12 @@ impl ClientShellState {
             return;
         }
         let rows = agent_rows(&self.endpoints, &self.active_endpoint_id, &self.config);
-        let entries = panel_entries(&rows, self.agent_sections);
+        let entries = panel_entries(
+            &rows,
+            &self.endpoints,
+            &self.active_endpoint_id,
+            &self.agent_sections,
+        );
         let Some(target) = entries.iter().position(|entry| {
             matches!(
                 entry,
@@ -148,14 +153,17 @@ struct EndpointAgentRow {
     agent: super::agent_sidebar::AgentRow,
 }
 
-fn panel_entries(
-    rows: &[EndpointAgentRow],
-    sections: super::agent_sidebar::AgentSectionsCollapsed,
-) -> Vec<super::agent_sidebar::AgentPanelEntry<'_, EndpointAgentRow>> {
+fn panel_entries<'a>(
+    rows: &'a [EndpointAgentRow],
+    endpoints: &[ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    sections: &super::agent_sidebar::AgentSectionsCollapsed,
+) -> Vec<super::agent_sidebar::AgentPanelEntry<'a, EndpointAgentRow>> {
     super::agent_sidebar::agent_panel_entries(
         rows,
-        |row| row.agent.archived,
+        |row| row.agent.agent_group.as_deref(),
         |row| row.agent.status,
+        super::agent_sidebar::active_agent_groups(endpoints, active_endpoint_id),
         sections,
     )
 }

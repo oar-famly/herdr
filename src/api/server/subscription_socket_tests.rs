@@ -226,7 +226,7 @@ fn reply_to_probe(request: ApiRequestMessage) {
                 foreground_cwd: None,
                 restore_error: None,
                 label: None,
-                archived: false,
+                agent_group: None,
                 agent: Some("pi".into()),
                 title: None,
                 terminal_title: None,

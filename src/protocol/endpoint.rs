@@ -242,6 +242,7 @@ mod tests {
             tab_bar_right_separator: String::new(),
             agent_view_label: None,
             agent_order: Vec::new(),
+            agent_groups: Vec::new(),
             workspaces: Vec::new(),
             tabs: Vec::new(),
             panes: Vec::new(),

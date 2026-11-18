@@ -41,9 +41,16 @@ crate::cli::projection::cli_params! {
 
 crate::cli::projection::cli_params! {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-    pub struct PaneArchiveSetParams => PaneArchiveProjection {
+    pub struct PaneGroupSetParams => PaneGroupProjection {
         pub pane_id: String => binding::input_target(),
-        pub archived: bool => Field::new(true),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub group: Option<String> => Field::new(None::<String>).input(
+            Input::value("to", "GROUP", |slot, value| {
+                *slot = Some(value.to_owned());
+                Ok(())
+            })
+            .help("Agent group id or label"),
+        ),
     }
 }
 
@@ -518,8 +525,8 @@ pub struct PaneInfo {
     pub restore_error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(default, skip_serializing_if = "super::is_false")]
-    pub archived: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_group: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -255,8 +255,24 @@ mod tests {
             Some("f5e4a3e01453ae7b188f127ce951c12c20e0bebcc17cc364eeb6d1a01fd5bf81")
         );
         assert_eq!(
-            actual.remove("pane.archive.set").as_deref(),
-            Some("596649133852b652f5c7435d40c69d79d7983b6b053de58845bf934aff68110b")
+            actual.remove("agent.group.create").as_deref(),
+            Some("64053aae02ac45ffdc871225a45bddbd7782ef153e5bda5563a1df5a1cb7d4ac")
+        );
+        assert_eq!(
+            actual.remove("agent.group.delete").as_deref(),
+            Some("0e62373dc3a69664c4acf0873131a6e5331ae9916ee0228660f8247eb6cd9597")
+        );
+        assert_eq!(
+            actual.remove("agent.group.move").as_deref(),
+            Some("8f9d0cc069efdbbd63335fcdd4805e19c753669f591196e1ce518d969f031b0e")
+        );
+        assert_eq!(
+            actual.remove("agent.group.rename").as_deref(),
+            Some("3ee88e4db0ab775c252b49b36b65afde51250f309aa456ecd11bb64264bdfe02")
+        );
+        assert_eq!(
+            actual.remove("pane.group.set").as_deref(),
+            Some("799d243ea6a2927e059209aa6cc4fd9757fb69fe884876d2a77a317182d611a7")
         );
 
         assert_eq!(

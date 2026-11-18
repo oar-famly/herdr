@@ -1,9 +1,9 @@
 use bytes::Bytes;
 
 use crate::api::schema::{
-    EventData, EventEnvelope, EventKind, PaneArchiveSetParams, PaneClearAgentAuthorityParams,
-    PaneCopyMotion, PaneCopyMotionParams, PaneCopySearchDirection, PaneCopySearchParams,
-    PaneCurrentParams, PaneDirection, PaneEdgesParams, PaneEdgesResult, PaneFocusDirectionParams,
+    EventData, EventEnvelope, EventKind, PaneClearAgentAuthorityParams, PaneCopyMotion,
+    PaneCopyMotionParams, PaneCopySearchDirection, PaneCopySearchParams, PaneCurrentParams,
+    PaneDirection, PaneEdgesParams, PaneEdgesResult, PaneFocusDirectionParams,
     PaneFocusDirectionReason, PaneFocusDirectionResult, PaneInfo, PaneInputSetParams,
     PaneLayoutPane, PaneLayoutParams, PaneLayoutRect, PaneLayoutSnapshot, PaneLayoutSplit,
     PaneListParams, PaneMoveDestination, PaneMoveParams, PaneMoveReason, PaneMoveResult,
@@ -1483,33 +1483,6 @@ impl App {
         encode_success(id, ResponseResult::Ok {})
     }
 
-    pub(super) fn handle_pane_archive_set(
-        &mut self,
-        id: String,
-        params: PaneArchiveSetParams,
-    ) -> String {
-        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
-            return pane_not_found(id, &params.pane_id);
-        };
-        let Some(terminal) = self
-            .state
-            .workspaces
-            .get(ws_idx)
-            .and_then(|ws| ws.terminal_id(pane_id))
-            .and_then(|terminal_id| self.state.terminals.get_mut(terminal_id))
-        else {
-            return pane_not_found(id, &params.pane_id);
-        };
-        if terminal.set_archived(params.archived) {
-            self.state.mark_session_dirty();
-            self.emit_pane_updated(ws_idx, pane_id);
-        }
-        let Some(pane) = self.pane_info(ws_idx, pane_id) else {
-            return pane_not_found(id, &params.pane_id);
-        };
-        encode_success(id, ResponseResult::PaneInfo { pane })
-    }
-
     pub(super) fn handle_pane_rename(&mut self, id: String, params: PaneRenameParams) -> String {
         let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
@@ -2401,63 +2374,6 @@ mod tests {
                 .unwrap()
                 .right_click_passthrough
         );
-    }
-
-    #[test]
-    fn pane_archive_set_files_the_pane_without_closing_it() {
-        let (mut app, public_pane_id) = app_with_test_workspace();
-        let pane_id = app.state.workspaces[0].tabs[0].root_pane;
-        let terminal_id = app.state.workspaces[0]
-            .terminal_id(pane_id)
-            .unwrap()
-            .clone();
-        let first_event = app.event_hub.current_sequence();
-        app.state.session_dirty = false;
-
-        let response = app.handle_pane_archive_set(
-            "req".into(),
-            PaneArchiveSetParams {
-                pane_id: public_pane_id.clone(),
-                archived: true,
-            },
-        );
-
-        let response: SuccessResponse = serde_json::from_str(&response).unwrap();
-        let ResponseResult::PaneInfo { pane } = response.result else {
-            panic!("archive should return pane info");
-        };
-        assert!(pane.archived);
-        assert_eq!(pane.pane_id, public_pane_id);
-        assert!(app.state.terminals[&terminal_id].archived);
-        assert!(app.state.workspaces[0].pane_state(pane_id).is_some());
-        assert!(app.state.session_dirty);
-        assert!(app
-            .event_hub
-            .events_after(first_event)
-            .iter()
-            .any(|(_, event)| event.event == EventKind::PaneUpdated));
-
-        app.handle_pane_archive_set(
-            "req".into(),
-            PaneArchiveSetParams {
-                pane_id: public_pane_id,
-                archived: false,
-            },
-        );
-        assert!(!app.state.terminals[&terminal_id].archived);
-    }
-
-    #[test]
-    fn pane_archive_set_rejects_unknown_panes() {
-        let (mut app, _) = app_with_test_workspace();
-        let response = app.handle_pane_archive_set(
-            "req".into(),
-            PaneArchiveSetParams {
-                pane_id: "missing:p9".into(),
-                archived: true,
-            },
-        );
-        assert!(response.contains("pane_not_found"), "{response}");
     }
 
     fn app_with_send_key_runtime(

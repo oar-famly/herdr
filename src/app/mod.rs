@@ -405,6 +405,10 @@ impl App {
         let mut restored_terminals = std::collections::HashMap::new();
         let mut restored_terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
         let snapshot = policy.restore_session.then(crate::persist::load).flatten();
+        let restored_agent_groups = snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.agent_groups.clone())
+            .unwrap_or_default();
         let mut plugin_installation_leases = crate::plugin_installations::Leases::new();
         let mut plugin_installation_cleanup_allowed = true;
         if policy.persist_plugin_registry {
@@ -577,10 +581,12 @@ impl App {
             host_terminal_theme: crate::terminal_theme::TerminalTheme::default(),
             host_cell_size: crate::kitty_graphics::HostCellSize::default(),
             session_dirty: false,
+            agent_groups: restored_agent_groups,
             terminal_runtime_shutdowns: Vec::new(),
         };
 
         state.terminals = restored_terminals;
+        state.reconcile_agent_groups();
 
         // Background auto-update is disabled for non-persistent test apps
         // and in debug/test builds so local development never mutates the
@@ -737,6 +743,8 @@ impl App {
         app.state.pane_id_aliases = pane_id_aliases;
         app.state.workspaces = workspaces;
         app.state.terminals = terminals;
+        app.state.agent_groups = snapshot.agent_groups.clone();
+        app.state.reconcile_agent_groups();
         app.terminal_runtimes = runtimes.into();
         app.state.active = snapshot
             .active

@@ -885,12 +885,23 @@ pub struct AppState {
     pub(crate) host_cell_size: crate::kitty_graphics::HostCellSize,
     /// Set when a persisted session snapshot would change.
     pub session_dirty: bool,
+    pub agent_groups: crate::agent_groups::AgentGroups,
     /// Terminal runtimes that should be shut down by the app/runtime layer
     /// after state has detached their terminal metadata.
     pub(crate) terminal_runtime_shutdowns: Vec<crate::terminal::TerminalId>,
 }
 
 impl AppState {
+    pub(crate) fn reconcile_agent_groups(&mut self) {
+        for terminal in self.terminals.values_mut() {
+            if let Some(group) = terminal.agent_group.as_deref() {
+                if !self.agent_groups.adopt(group) {
+                    terminal.agent_group = None;
+                }
+            }
+        }
+    }
+
     pub(crate) fn mark_session_dirty(&mut self) {
         self.session_dirty = true;
     }
@@ -1119,6 +1130,7 @@ impl AppState {
             host_terminal_theme: TerminalTheme::default(),
             host_cell_size: crate::kitty_graphics::HostCellSize::default(),
             session_dirty: false,
+            agent_groups: Default::default(),
             terminal_runtime_shutdowns: Vec::new(),
         }
     }

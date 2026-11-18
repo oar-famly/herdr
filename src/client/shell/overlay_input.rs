@@ -941,6 +941,31 @@ impl ClientShellState {
             return;
         };
         let trimmed = rename.input.trim();
+        if let ClientRenameTarget::NewAgentGroup { assign_pane_id } = rename.target {
+            if !trimmed.is_empty() {
+                self.push_endpoint_method(
+                    crate::api::schema::Method::AgentGroupCreate(
+                        crate::api::schema::AgentGroupCreateParams {
+                            label: trimmed.to_owned(),
+                        },
+                    ),
+                    outcome,
+                );
+                if let Some(pane_id) = assign_pane_id {
+                    self.push_endpoint_method(
+                        crate::api::schema::Method::PaneGroupSet(
+                            crate::api::schema::PaneGroupSetParams {
+                                pane_id,
+                                group: Some(trimmed.to_owned()),
+                            },
+                        ),
+                        outcome,
+                    );
+                }
+            }
+            outcome.repaint = true;
+            return;
+        }
         let method = match rename.target {
             ClientRenameTarget::NewWorkspace {
                 source_workspace_id,
@@ -993,6 +1018,18 @@ impl ClientShellState {
                     label: Some(trimmed.to_owned()),
                 },
             )),
+            ClientRenameTarget::AgentGroup {
+                group_id,
+                original_label,
+            } => (!trimmed.is_empty() && trimmed != original_label).then(|| {
+                crate::api::schema::Method::AgentGroupRename(
+                    crate::api::schema::AgentGroupRenameParams {
+                        group: group_id,
+                        label: trimmed.to_owned(),
+                    },
+                )
+            }),
+            ClientRenameTarget::NewAgentGroup { .. } => None,
         };
         if let Some(method) = method {
             self.push_endpoint_method(method, outcome);

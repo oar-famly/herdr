@@ -57,6 +57,50 @@ cli_params! {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AgentGroupInfo {
+    pub group_id: String,
+    pub label: String,
+}
+
+impl From<&crate::agent_groups::AgentGroup> for AgentGroupInfo {
+    fn from(group: &crate::agent_groups::AgentGroup) -> Self {
+        Self {
+            group_id: group.id.clone(),
+            label: group.label.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AgentGroupCreateParams {
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AgentGroupRenameParams {
+    pub group: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentGroupMoveDirection {
+    Up,
+    Down,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AgentGroupMoveParams {
+    pub group: String,
+    pub direction: AgentGroupMoveDirection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AgentGroupTarget {
+    pub group: String,
+}
+
 cli_params! {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct AgentRenameParams => AgentRenameProjection {
@@ -235,8 +279,8 @@ pub struct AgentInfo {
     pub tab_id: String,
     pub pane_id: String,
     pub focused: bool,
-    #[serde(default, skip_serializing_if = "super::is_false")]
-    pub archived: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_group: Option<String>,
     #[serde(default, skip_serializing_if = "super::is_false")]
     pub launch_pending: bool,
     #[serde(default, skip_serializing_if = "super::is_false")]

@@ -28,10 +28,8 @@ pub(super) struct ClientChromePreferences {
     pub(super) collapsed_groups: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(super) remote_collapsed_groups: Vec<ClientRemoteCollapsedGroups>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) active_agents_collapsed: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) archived_agents_collapsed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(super) collapsed_agent_sections: Vec<String>,
 }
 
 pub(super) fn path_for_local_endpoint(socket_path: &Path) -> PathBuf {

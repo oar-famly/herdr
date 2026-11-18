@@ -1843,6 +1843,17 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                let agent_group = self
+                    .hits
+                    .agent_sections
+                    .iter()
+                    .find(|(rect, _)| super::contains(*rect, point))
+                    .map(|(_, group)| group.clone());
+                if let Some(group) = agent_group {
+                    self.open_agent_group_context_menu(group, mouse.column, mouse.row);
+                    outcome.repaint = true;
+                    return;
+                }
                 let agent_pane_id = self
                     .hits
                     .agents
@@ -1861,6 +1872,11 @@ impl ClientShellState {
                     });
                 if let Some(pane_id) = agent_pane_id {
                     self.open_agent_context_menu(pane_id, mouse.column, mouse.row);
+                    outcome.repaint = true;
+                    return;
+                }
+                if super::contains(self.hits.agent_body, point) {
+                    self.open_agent_panel_context_menu(mouse.column, mouse.row);
                     outcome.repaint = true;
                     return;
                 }
@@ -2048,9 +2064,9 @@ impl ClientShellState {
                     .agent_sections
                     .iter()
                     .find(|(rect, _)| super::contains(*rect, point))
-                    .map(|(_, section)| *section);
+                    .map(|(_, section)| section.clone());
                 if let Some(section) = section {
-                    self.agent_sections.toggle(section);
+                    self.agent_sections.toggle(&section);
                     self.persist_chrome_preferences(outcome);
                     outcome.repaint = true;
                     return;

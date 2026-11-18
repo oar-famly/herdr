@@ -173,7 +173,7 @@ pub(super) fn snapshot_with_completions(
                 state_labels,
                 tokens,
                 focused,
-                archived: agent.archived,
+                agent_group: agent.agent_group,
             }
         })
         .collect();
@@ -259,6 +259,16 @@ pub(super) fn snapshot_with_completions(
         tab_bar_right_separator: app.state.tab_bar_right_separator.clone(),
         agent_view_label,
         agent_order,
+        agent_groups: app
+            .state
+            .agent_groups
+            .groups
+            .iter()
+            .map(|group| protocol::ClientShellAgentGroup {
+                group_id: group.id.clone(),
+                label: group.label.clone(),
+            })
+            .collect(),
         workspaces,
         tabs,
         panes,

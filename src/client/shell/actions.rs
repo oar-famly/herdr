@@ -148,6 +148,11 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if action == crate::input::KeybindAction::AgentMenu {
+                    self.open_focused_agent_menu();
+                    outcome.repaint = true;
+                    return;
+                }
                 if action == crate::input::KeybindAction::WorkspacePicker {
                     self.pending_workspace_highlight = None;
                     self.mobile_switcher_scroll = 0;
@@ -893,7 +898,7 @@ impl ClientShellState {
                 let agents = super::agent_sidebar::visible_agent_pane_ids(
                     snapshot,
                     self.config.agent_panel_sort,
-                    self.agent_sections,
+                    &self.agent_sections,
                 );
                 Some(Method::PaneFocus(PaneTarget {
                     pane_id: agents.get(index)?.clone(),
@@ -903,7 +908,7 @@ impl ClientShellState {
                 let agents = super::agent_sidebar::visible_agent_pane_ids(
                     snapshot,
                     self.config.agent_panel_sort,
-                    self.agent_sections,
+                    &self.agent_sections,
                 );
                 if agents.is_empty() {
                     return None;
@@ -930,7 +935,7 @@ impl ClientShellState {
                     let entry = super::agent_sidebar::agent_panel_entry_index(
                         snapshot,
                         self.config.agent_panel_sort,
-                        self.agent_sections,
+                        &self.agent_sections,
                         &pane_id,
                     )
                     .unwrap_or(next);
@@ -1108,20 +1113,6 @@ impl ClientShellState {
                 pane_id: focused_pane,
                 mode: PaneZoomMode::Toggle,
             })),
-            KeybindAction::ToggleAgentArchived => {
-                let pane_id = focused_pane?;
-                let archived = snapshot
-                    .agents
-                    .iter()
-                    .find(|agent| agent.pane_id == pane_id)?
-                    .archived;
-                Some(Method::PaneArchiveSet(
-                    crate::api::schema::PaneArchiveSetParams {
-                        pane_id,
-                        archived: !archived,
-                    },
-                ))
-            }
             KeybindAction::ClearPane => Some(Method::PaneClear(PaneTarget {
                 pane_id: focused_pane?,
             })),

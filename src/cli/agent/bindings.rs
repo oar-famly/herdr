@@ -236,6 +236,7 @@ pub(crate) enum Operation {
     Start(AgentStartParams),
     Attach(Attach),
     Explain(Explain),
+    Group(String, Box<crate::api::schema::Method>),
 }
 
 fn leaf(name: &'static str, arguments: Vec<clap::Arg>, about: &'static str) -> Command {
@@ -270,6 +271,93 @@ pub(crate) fn command() -> Command {
             .override_usage("herdr agent attach <TARGET> [OPTIONS]"))
         .subcommand(leaf("explain", ExplainProjection::arguments(), "Explain agent detection state")
             .group(ArgGroup::new("explain_source").args(["target", "file"]).required(true)))
+        .subcommand(group_command())
+}
+
+fn group_command() -> Command {
+    let group = || {
+        clap::Arg::new("group")
+            .value_name("GROUP")
+            .required(true)
+            .help("Group id or label")
+    };
+    let label = || clap::Arg::new("label").value_name("LABEL").required(true);
+    Command::new("group")
+        .about("Manage agent groups (sections of the agent panel)")
+        .subcommand_required(true)
+        .subcommand(Command::new("list").about("List agent groups in panel order"))
+        .subcommand(
+            Command::new("create")
+                .about("Create an agent group")
+                .arg(label()),
+        )
+        .subcommand(
+            Command::new("rename")
+                .about("Rename an agent group")
+                .arg(group())
+                .arg(label()),
+        )
+        .subcommand(
+            Command::new("move")
+                .about("Move an agent group up or down in the panel")
+                .arg(group())
+                .arg(
+                    clap::Arg::new("direction")
+                        .value_name("DIRECTION")
+                        .required(true)
+                        .value_parser(["up", "down"]),
+                ),
+        )
+        .subcommand(
+            Command::new("delete")
+                .about("Delete an agent group; its agents return to the default section")
+                .arg(group()),
+        )
+        .after_help("File an agent into a group with: herdr pane group <PANE_ID> --to <GROUP>")
+}
+
+fn group_operation(matches: &ArgMatches) -> Result<Operation, ParseError> {
+    use crate::api::schema::{
+        AgentGroupCreateParams, AgentGroupMoveDirection, AgentGroupMoveParams,
+        AgentGroupRenameParams, AgentGroupTarget, EmptyParams, Method,
+    };
+
+    let value = |matches: &ArgMatches, name: &str| {
+        matches.get_one::<String>(name).cloned().unwrap_or_default()
+    };
+    let Some((name, matches)) = matches.subcommand() else {
+        return Err(ParseError::Usage("missing agent group command".into()));
+    };
+    let method = match name {
+        "list" => Method::AgentGroupList(EmptyParams::default()),
+        "create" => Method::AgentGroupCreate(AgentGroupCreateParams {
+            label: value(matches, "label"),
+        }),
+        "rename" => Method::AgentGroupRename(AgentGroupRenameParams {
+            group: value(matches, "group"),
+            label: value(matches, "label"),
+        }),
+        "move" => Method::AgentGroupMove(AgentGroupMoveParams {
+            group: value(matches, "group"),
+            direction: if value(matches, "direction") == "up" {
+                AgentGroupMoveDirection::Up
+            } else {
+                AgentGroupMoveDirection::Down
+            },
+        }),
+        "delete" => Method::AgentGroupDelete(AgentGroupTarget {
+            group: value(matches, "group"),
+        }),
+        _ => {
+            return Err(ParseError::Usage(format!(
+                "unknown agent group command: {name}"
+            )))
+        }
+    };
+    Ok(Operation::Group(
+        format!("cli:agent:group:{name}"),
+        Box::new(method),
+    ))
 }
 
 pub(crate) fn from_matches(matches: &ArgMatches) -> Result<Operation, ParseError> {
@@ -298,6 +386,7 @@ pub(crate) fn from_matches(matches: &ArgMatches) -> Result<Operation, ParseError
         "start" => Operation::Start(AgentStartProjection::from_matches(matches)?),
         "attach" => Operation::Attach(AttachProjection::from_matches(matches)?),
         "explain" => Operation::Explain(ExplainProjection::from_matches(matches)?),
+        "group" => group_operation(matches)?,
         _ => return Err(ParseError::Usage(format!("unknown agent command: {name}"))),
     })
 }

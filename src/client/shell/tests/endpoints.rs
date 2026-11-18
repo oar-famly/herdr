@@ -37,7 +37,7 @@ fn agent(
         state_labels: Vec::new(),
         tokens: Vec::new(),
         focused: true,
-        archived: false,
+        agent_group: None,
     }
 }
 
@@ -712,7 +712,7 @@ fn agent_navigation_keeps_scroll_when_target_is_visible() {
         &state.endpoints,
         &state.active_endpoint_id,
         state.config.agent_panel_sort,
-        state.agent_sections,
+        &state.agent_sections,
     );
     let index = targets
         .iter()

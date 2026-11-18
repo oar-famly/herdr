@@ -327,18 +327,18 @@ mod tests {
                 json!({"pane_id": "pane", "right_click": "herdr"}),
             ),
             (
-                "archive",
-                vec!["pane"],
-                "cli:pane:archive",
-                "pane.archive.set",
-                json!({"pane_id": "pane", "archived": true}),
+                "group",
+                vec!["pane", "--to", "reviews"],
+                "cli:pane:group",
+                "pane.group.set",
+                json!({"pane_id": "pane", "group": "reviews"}),
             ),
             (
-                "unarchive",
+                "ungroup",
                 vec!["pane"],
-                "cli:pane:unarchive",
-                "pane.archive.set",
-                json!({"pane_id": "pane", "archived": false}),
+                "cli:pane:ungroup",
+                "pane.group.set",
+                json!({"pane_id": "pane"}),
             ),
             (
                 "split",
@@ -645,19 +645,21 @@ mod tests {
     }
 
     #[test]
-    fn parse_pane_archive_and_unarchive_target_the_named_pane() {
-        for (name, args, archived) in [
-            ("archive", vec!["w1:p2"], true),
-            ("unarchive", vec!["--pane", "w1:p2"], false),
+    fn parse_pane_group_and_ungroup_target_the_named_pane() {
+        for (name, args, group) in [
+            ("group", vec!["w1:p2", "--to", "reviews"], Some("reviews")),
+            ("ungroup", vec!["--pane", "w1:p2"], None),
         ] {
             let request = request(name, &args).unwrap();
-            let crate::api::schema::Method::PaneArchiveSet(params) = request.method else {
-                panic!("{name} should map to pane.archive.set");
+            let crate::api::schema::Method::PaneGroupSet(params) = request.method else {
+                panic!("{name} should map to pane.group.set");
             };
             assert_eq!(params.pane_id, "w1:p2");
-            assert_eq!(params.archived, archived);
+            assert_eq!(params.group.as_deref(), group);
         }
-        assert!(request("archive", &["w1:p1", "--pane", "w1:p2"]).is_err());
+        assert!(request("group", &["w1:p2"]).is_err());
+        assert!(request("ungroup", &["w1:p2", "--to", "reviews"]).is_err());
+        assert!(request("group", &["w1:p1", "--pane", "w1:p2", "--to", "x"]).is_err());
     }
 
     #[test]

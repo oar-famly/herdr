@@ -4,7 +4,10 @@ impl ClientContextMenuOverlay {
     pub(super) fn items(&self) -> Vec<ClientContextMenuItem> {
         use ClientContextMenuAction as Action;
 
-        let item = |label, action| ClientContextMenuItem { label, action };
+        let item = |label: &'static str, action| ClientContextMenuItem {
+            label: label.into(),
+            action,
+        };
         match &self.target {
             ClientContextMenuTarget::Workspace { is_git: false, .. } => {
                 vec![item("Rename", Action::Rename), item("Close", Action::Close)]
@@ -51,18 +54,44 @@ impl ClientContextMenuOverlay {
                 item("Close", Action::Close),
             ],
             ClientContextMenuTarget::Agent {
-                archived,
-                can_archive,
+                destinations,
+                can_group,
                 ..
             } => {
                 let mut items = vec![item("Focus", Action::FocusAgent)];
-                if *can_archive {
-                    items.push(item(
-                        if *archived { "Unarchive" } else { "Archive" },
-                        Action::ToggleArchived,
-                    ));
+                if *can_group {
+                    items.extend(destinations.iter().enumerate().map(|(index, (label, _))| {
+                        ClientContextMenuItem {
+                            label: format!("Move to: {label}").into(),
+                            action: Action::MoveAgent(index),
+                        }
+                    }));
+                    items.push(item("New agent group...", Action::NewAgentGroup));
                 }
                 items.push(item("Rename pane", Action::RenamePane));
+                items
+            }
+            ClientContextMenuTarget::AgentGroup {
+                can_edit: false, ..
+            } => Vec::new(),
+            ClientContextMenuTarget::AgentGroup { group: None, .. }
+            | ClientContextMenuTarget::AgentPanel => {
+                vec![item("New agent group...", Action::NewAgentGroup)]
+            }
+            ClientContextMenuTarget::AgentGroup {
+                can_move_up,
+                can_move_down,
+                ..
+            } => {
+                let mut items = vec![item("Rename group", Action::Rename)];
+                if *can_move_up {
+                    items.push(item("Move up", Action::MoveAgentGroupUp));
+                }
+                if *can_move_down {
+                    items.push(item("Move down", Action::MoveAgentGroupDown));
+                }
+                items.push(item("Delete group", Action::DeleteAgentGroup));
+                items.push(item("New agent group...", Action::NewAgentGroup));
                 items
             }
             ClientContextMenuTarget::Pane {
@@ -182,32 +211,130 @@ impl ClientShellState {
         }));
     }
 
-    pub(super) fn open_agent_context_menu(&mut self, pane_id: String, x: u16, y: u16) {
-        let Some(agent) = self.snapshot.as_deref().and_then(|snapshot| {
-            snapshot
-                .agents
-                .iter()
-                .find(|agent| agent.pane_id == pane_id)
-        }) else {
-            return;
-        };
-        let archived = agent.archived;
-        let can_archive = self.supports_endpoint_method(
-            &crate::api::schema::Method::PaneArchiveSet(crate::api::schema::PaneArchiveSetParams {
-                pane_id: pane_id.clone(),
-                archived: !archived,
-            }),
-        );
-        self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
-            target: ClientContextMenuTarget::Agent {
-                pane_id,
-                archived,
-                can_archive,
+    fn agent_groups_supported(&self) -> bool {
+        self.supports_endpoint_method(&crate::api::schema::Method::AgentGroupCreate(
+            crate::api::schema::AgentGroupCreateParams {
+                label: String::new(),
             },
+        ))
+    }
+
+    fn open_context_menu(&mut self, target: ClientContextMenuTarget, x: u16, y: u16) {
+        let menu = ClientContextMenuOverlay {
+            target,
             x,
             y,
             highlighted: 0,
-        }));
+        };
+        if !menu.items().is_empty() {
+            self.overlay = Some(ClientShellOverlay::ContextMenu(menu));
+        }
+    }
+
+    pub(super) fn open_agent_context_menu(&mut self, pane_id: String, x: u16, y: u16) {
+        let Some(snapshot) = self.snapshot.as_deref() else {
+            return;
+        };
+        let Some(agent) = snapshot
+            .agents
+            .iter()
+            .find(|agent| agent.pane_id == pane_id)
+        else {
+            return;
+        };
+        let current = agent.agent_group.clone().filter(|group| {
+            snapshot
+                .agent_groups
+                .iter()
+                .any(|candidate| &candidate.group_id == group)
+        });
+        let destinations = if snapshot.agent_groups.is_empty() {
+            Vec::new()
+        } else {
+            std::iter::once((super::agent_sidebar::DEFAULT_SECTION_LABEL.to_owned(), None))
+                .chain(
+                    snapshot
+                        .agent_groups
+                        .iter()
+                        .map(|group| (group.label.clone(), Some(group.group_id.clone()))),
+                )
+                .filter(|(_, group)| *group != current)
+                .collect()
+        };
+        let can_group = self.agent_groups_supported();
+        self.open_context_menu(
+            ClientContextMenuTarget::Agent {
+                pane_id,
+                destinations,
+                can_group,
+            },
+            x,
+            y,
+        );
+    }
+
+    pub(super) fn open_agent_group_context_menu(&mut self, group: Option<String>, x: u16, y: u16) {
+        let Some(snapshot) = self.snapshot.as_deref() else {
+            return;
+        };
+        let groups = &snapshot.agent_groups;
+        let index = group.as_deref().and_then(|group| {
+            groups
+                .iter()
+                .position(|candidate| candidate.group_id == group)
+        });
+        let label = index
+            .map(|index| groups[index].label.clone())
+            .unwrap_or_default();
+        let target = ClientContextMenuTarget::AgentGroup {
+            can_move_up: index.is_some_and(|index| index > 0),
+            can_move_down: index.is_some_and(|index| index + 1 < groups.len()),
+            group: index.and(group),
+            label,
+            can_edit: self.agent_groups_supported(),
+        };
+        self.open_context_menu(target, x, y);
+    }
+
+    pub(super) fn open_agent_panel_context_menu(&mut self, x: u16, y: u16) {
+        if self.agent_groups_supported() {
+            self.open_context_menu(ClientContextMenuTarget::AgentPanel, x, y);
+        }
+    }
+
+    pub(super) fn open_focused_agent_menu(&mut self) {
+        let Some(pane_id) = self
+            .snapshot
+            .as_deref()
+            .and_then(|snapshot| snapshot.focused_pane_id.clone())
+            .filter(|pane_id| {
+                self.snapshot.as_deref().is_some_and(|snapshot| {
+                    snapshot
+                        .agents
+                        .iter()
+                        .any(|agent| &agent.pane_id == pane_id)
+                })
+            })
+        else {
+            return;
+        };
+        let anchor = self
+            .hits
+            .agents
+            .iter()
+            .find(|(_, candidate)| *candidate == pane_id)
+            .map(|(rect, _)| *rect)
+            .or_else(|| {
+                self.hits
+                    .endpoint_agents
+                    .iter()
+                    .find(|(_, endpoint_id, candidate)| {
+                        *candidate == pane_id && endpoint_id == &self.active_endpoint_id
+                    })
+                    .map(|(rect, _, _)| *rect)
+            })
+            .unwrap_or(self.hits.agent_body);
+        self.open_agent_context_menu(pane_id, anchor.x.saturating_add(2), anchor.y);
     }
 
     pub(super) fn move_context_menu_selection(&mut self, delta: isize) {
@@ -259,8 +386,16 @@ impl ClientShellState {
                 outcome,
             ),
             ClientContextMenuTarget::Agent {
-                pane_id, archived, ..
-            } => self.activate_agent_context_action(pane_id, archived, action, outcome),
+                pane_id,
+                destinations,
+                ..
+            } => self.activate_agent_context_action(pane_id, destinations, action, outcome),
+            ClientContextMenuTarget::AgentGroup { group, label, .. } => {
+                self.activate_agent_group_context_action(group, label, action, outcome)
+            }
+            ClientContextMenuTarget::AgentPanel => {
+                self.activate_agent_group_context_action(None, String::new(), action, outcome)
+            }
         }
         outcome.repaint = true;
     }
@@ -401,26 +536,38 @@ impl ClientShellState {
         }
     }
 
+    fn open_new_agent_group_overlay(&mut self, assign_pane_id: Option<String>) {
+        self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            title: "new agent group",
+            input: TextEditor::new("", true),
+            target: ClientRenameTarget::NewAgentGroup { assign_pane_id },
+        }));
+    }
+
     fn activate_agent_context_action(
         &mut self,
         pane_id: String,
-        archived: bool,
+        destinations: Vec<(String, Option<String>)>,
         action: ClientContextMenuAction,
         outcome: &mut ClientShellInput,
     ) {
-        use crate::api::schema::{Method, PaneArchiveSetParams, PaneTarget};
+        use crate::api::schema::{Method, PaneGroupSetParams, PaneTarget};
 
         match action {
             ClientContextMenuAction::FocusAgent => {
                 self.push_endpoint_method(Method::PaneFocus(PaneTarget { pane_id }), outcome)
             }
-            ClientContextMenuAction::ToggleArchived => self.push_endpoint_method(
-                Method::PaneArchiveSet(PaneArchiveSetParams {
-                    pane_id,
-                    archived: !archived,
-                }),
-                outcome,
-            ),
+            ClientContextMenuAction::MoveAgent(index) => {
+                if let Some((_, group)) = destinations.into_iter().nth(index) {
+                    self.push_endpoint_method(
+                        Method::PaneGroupSet(PaneGroupSetParams { pane_id, group }),
+                        outcome,
+                    );
+                }
+            }
+            ClientContextMenuAction::NewAgentGroup => {
+                self.open_new_agent_group_overlay(Some(pane_id));
+            }
             ClientContextMenuAction::RenamePane => {
                 let workspace_id = self
                     .snapshot
@@ -434,6 +581,59 @@ impl ClientShellState {
                     None,
                     false,
                     action,
+                    outcome,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    fn activate_agent_group_context_action(
+        &mut self,
+        group: Option<String>,
+        label: String,
+        action: ClientContextMenuAction,
+        outcome: &mut ClientShellInput,
+    ) {
+        use crate::api::schema::{
+            AgentGroupMoveDirection, AgentGroupMoveParams, AgentGroupTarget, Method,
+        };
+
+        if action == ClientContextMenuAction::NewAgentGroup {
+            self.open_new_agent_group_overlay(None);
+            return;
+        }
+        let Some(group) = group else {
+            return;
+        };
+        match action {
+            ClientContextMenuAction::Rename => {
+                self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+                    title: "rename agent group",
+                    input: TextEditor::new(&label, false),
+                    target: ClientRenameTarget::AgentGroup {
+                        group_id: group,
+                        original_label: label,
+                    },
+                }));
+            }
+            ClientContextMenuAction::MoveAgentGroupUp
+            | ClientContextMenuAction::MoveAgentGroupDown => {
+                self.push_endpoint_method(
+                    Method::AgentGroupMove(AgentGroupMoveParams {
+                        group,
+                        direction: if action == ClientContextMenuAction::MoveAgentGroupUp {
+                            AgentGroupMoveDirection::Up
+                        } else {
+                            AgentGroupMoveDirection::Down
+                        },
+                    }),
+                    outcome,
+                );
+            }
+            ClientContextMenuAction::DeleteAgentGroup => {
+                self.push_endpoint_method(
+                    Method::AgentGroupDelete(AgentGroupTarget { group }),
                     outcome,
                 );
             }

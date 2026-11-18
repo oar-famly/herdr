@@ -385,8 +385,8 @@ pub struct KeysConfig {
     pub next_agent: BindingConfig,
     /// Focus an agent by index 1-9. Unset by default.
     pub focus_agent: BindingConfig,
-    /// Move the focused agent between the Active and Archived sections of the agent panel. Unset by default.
-    pub toggle_agent_archived: BindingConfig,
+    /// Open the agent menu (focus, move to a group, rename) for the focused agent. Unset by default.
+    pub agent_menu: BindingConfig,
     /// Local-client shortcut that sends a clipboard image to a remote Herdr session. Default: "ctrl+v".
     pub remote_image_paste: String,
     /// Create a new tab in the active workspace. Default: "prefix+c"
@@ -525,7 +525,7 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     focus_agent: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    toggle_agent_archived: Option<BindingConfig>,
+    agent_menu: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     remote_image_paste: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -672,7 +672,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(previous_agent);
         apply_field!(next_agent);
         apply_field!(focus_agent);
-        apply_field!(toggle_agent_archived);
+        apply_field!(agent_menu);
         apply_field!(remote_image_paste);
         apply_field!(new_tab);
         apply_field!(rename_tab);
@@ -778,7 +778,7 @@ impl KeysConfig {
         copy_effective_action_field!(previous_agent, keybinds.previous_agent);
         copy_effective_action_field!(next_agent, keybinds.next_agent);
         copy_effective_indexed_field!(focus_agent, keybinds.focus_agent);
-        copy_effective_action_field!(toggle_agent_archived, keybinds.toggle_agent_archived);
+        copy_effective_action_field!(agent_menu, keybinds.agent_menu);
         copy_user_field!(remote_image_paste);
         copy_effective_action_field!(new_tab, keybinds.new_tab);
         copy_effective_action_field!(rename_tab, keybinds.rename_tab);
@@ -1151,7 +1151,7 @@ impl Default for KeysConfig {
             previous_agent: BindingConfig::empty(),
             next_agent: BindingConfig::empty(),
             focus_agent: BindingConfig::empty(),
-            toggle_agent_archived: BindingConfig::empty(),
+            agent_menu: BindingConfig::empty(),
             remote_image_paste: "ctrl+v".into(),
             new_tab: BindingConfig::one("prefix+c"),
             rename_tab: BindingConfig::one("prefix+shift+t"),
