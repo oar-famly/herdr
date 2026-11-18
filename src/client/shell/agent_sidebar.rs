@@ -453,7 +453,9 @@ pub(super) fn render_section_header(
     let palette = &config.palette;
     let mut spans = vec![ratatui::text::Span::styled(
         format!(" {}", if header.collapsed { "▸" } else { "▾" }),
-        Style::default().fg(palette.accent),
+        Style::default()
+            .fg(palette.overlay0)
+            .add_modifier(Modifier::BOLD),
     )];
     if header.collapsed {
         let status = header
