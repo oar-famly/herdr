@@ -1815,7 +1815,7 @@ fn agent_groups_render_as_collapsible_sections_that_persist_their_toggle() {
     state.set_pane_surface(surface());
     let frame = state.compose(106, 30).expect("grouped agent sidebar");
     let rows = frame_rows(&frame);
-    for header in [" ○ 1 active ──", " ● 1 reviews ──", " ● 1 parked ──"] {
+    for header in ["   1 active ──", "   1 reviews ──", "   1 parked ──"] {
         assert!(
             rows.iter()
                 .any(|row| row.contains(header) && row.contains("─ ▾")),

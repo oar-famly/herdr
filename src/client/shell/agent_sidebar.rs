@@ -97,7 +97,7 @@ pub(super) fn section_rank(
 }
 
 /// Sections appear only once a group exists. Every group gets a header, even when
-/// empty, carrying the most urgent status of its agents.
+/// empty. A collapsed header carries the most urgent status of the agents it hides.
 pub(super) fn agent_panel_entries<'a, T>(
     rows: &'a [T],
     group_of: impl Fn(&T) -> Option<&str>,
@@ -121,10 +121,14 @@ pub(super) fn agent_panel_entries<'a, T>(
             .collect::<Vec<_>>();
         let is_collapsed = collapsed.is_collapsed(&section);
         entries.push(AgentPanelEntry::Header(AgentSectionHeader {
-            status: members
-                .iter()
-                .map(|row| status(row))
-                .max_by_key(|status| status_priority(*status)),
+            status: is_collapsed
+                .then(|| {
+                    members
+                        .iter()
+                        .map(|row| status(row))
+                        .max_by_key(|status| status_priority(*status))
+                })
+                .flatten(),
             section,
             label,
             count: members.len(),
@@ -453,7 +457,11 @@ pub(super) fn render_section_header(
     let mut spans = vec![
         ratatui::text::Span::raw(" "),
         ratatui::text::Span::styled(
-            status_icon(status, config.status_indicators),
+            if header.collapsed {
+                status_icon(status, config.status_indicators)
+            } else {
+                " "
+            },
             Style::default().fg(status_color(status, palette)),
         ),
         ratatui::text::Span::styled(
@@ -753,12 +761,12 @@ mod tests {
         assert_eq!(
             render(&rows(), &groups(), &AgentSectionsCollapsed::default()),
             [
-                "[active 2 Some(Working)]",
+                "[active 2 None]",
                 "a",
                 "c",
-                "[reviews 1 Some(Idle)]",
+                "[reviews 1 None]",
                 "e",
-                "[parked 2 Some(Blocked)]",
+                "[parked 2 None]",
                 "b",
                 "d"
             ]
@@ -771,7 +779,7 @@ mod tests {
         assert_eq!(
             render(&rows, &groups(), &AgentSectionsCollapsed::default()),
             [
-                "[active 1 Some(Idle)]",
+                "[active 1 None]",
                 "a",
                 "[reviews 0 None]",
                 "[parked 0 None]"
@@ -780,13 +788,13 @@ mod tests {
     }
 
     #[test]
-    fn sections_show_their_most_urgent_status_and_collapsed_ones_hide_from_navigation() {
+    fn collapsed_sections_show_their_most_urgent_status_and_hide_from_navigation() {
         let state = collapsed(&["g2", ""]);
         assert_eq!(
             render(&rows(), &groups(), &state),
             [
                 "[active 2 collapsed Some(Working)]",
-                "[reviews 1 Some(Idle)]",
+                "[reviews 1 None]",
                 "e",
                 "[parked 2 collapsed Some(Blocked)]"
             ]
