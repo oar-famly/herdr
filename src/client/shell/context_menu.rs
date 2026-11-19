@@ -68,7 +68,7 @@ impl ClientContextMenuOverlay {
                     }));
                     items.push(item("New agent group...", Action::NewAgentGroup));
                 }
-                items.push(item("Rename pane", Action::RenamePane));
+                items.push(item("Rename tab", Action::Rename));
                 items
             }
             ClientContextMenuTarget::AgentGroup {
@@ -568,21 +568,26 @@ impl ClientShellState {
             ClientContextMenuAction::NewAgentGroup => {
                 self.open_new_agent_group_overlay(Some(pane_id));
             }
-            ClientContextMenuAction::RenamePane => {
-                let workspace_id = self
-                    .snapshot
-                    .as_deref()
-                    .and_then(|snapshot| snapshot.panes.iter().find(|pane| pane.pane_id == pane_id))
-                    .map(|pane| pane.workspace_id.clone())
-                    .unwrap_or_default();
-                self.activate_pane_context_action(
-                    pane_id,
-                    workspace_id,
-                    None,
-                    false,
-                    action,
-                    outcome,
-                );
+            ClientContextMenuAction::Rename => {
+                let tab = self.snapshot.as_deref().and_then(|snapshot| {
+                    let tab_id = &snapshot
+                        .agents
+                        .iter()
+                        .find(|agent| agent.pane_id == pane_id)?
+                        .tab_id;
+                    snapshot.tabs.iter().find(|tab| &tab.tab_id == tab_id)
+                });
+                if let Some(tab) = tab {
+                    self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+                        title: "rename tab",
+                        input: TextEditor::new(&tab.label, false),
+                        target: ClientRenameTarget::Tab {
+                            tab_id: tab.tab_id.clone(),
+                            auto_name: !tab.custom_label,
+                            original_name: tab.label.clone(),
+                        },
+                    }));
+                }
             }
             _ => {}
         }

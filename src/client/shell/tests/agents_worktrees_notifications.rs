@@ -1855,7 +1855,7 @@ fn agent_menu_moves_agents_between_groups_and_creates_new_ones() {
             "Move to: active",
             "Move to: reviews",
             "New agent group...",
-            "Rename pane"
+            "Rename tab"
         ]
     );
     let outcome = choose(&mut state, "Move to: reviews");
@@ -1964,7 +1964,7 @@ fn blank_agent_space_offers_a_new_group_and_the_keybinding_opens_the_agent_menu(
     );
     assert_eq!(
         menu_labels(&state),
-        ["Focus", "New agent group...", "Rename pane"]
+        ["Focus", "New agent group...", "Rename tab"]
     );
 }
 
@@ -1974,7 +1974,7 @@ fn agent_menu_omits_grouping_for_servers_without_group_methods() {
     state.set_snapshot(Box::new(grouped_agents_snapshot()));
     state.set_endpoint_methods(Some(vec!["pane.focus".into(), "pane.rename".into()]));
     state.open_agent_context_menu("pane_1".into(), 1, 1);
-    assert_eq!(menu_labels(&state), ["Focus", "Rename pane"]);
+    assert_eq!(menu_labels(&state), ["Focus", "Rename tab"]);
     state.overlay = None;
     state.open_agent_panel_context_menu(1, 1);
     assert!(state.overlay.is_none());
@@ -2000,4 +2000,27 @@ fn next_agent_skips_collapsed_groups() {
             crate::input::KeybindAction::FocusAgent(2)
         ))
     );
+}
+
+#[test]
+fn agent_menu_renames_the_tab_the_sidebar_row_shows() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(grouped_agents_snapshot()));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("grouped agent sidebar");
+
+    let row = state.hits.agents[0].0;
+    click(&mut state, row, MouseButton::Right);
+    choose(&mut state, "Rename tab");
+    let Some(ClientShellOverlay::Rename(rename)) = state.overlay.as_mut() else {
+        panic!("rename tab should prompt for a name");
+    };
+    rename.input = TextEditor::new("orchestrator", false);
+    let mut renamed = ClientShellInput::default();
+    state.save_rename_overlay(&mut renamed);
+    assert!(matches!(
+        endpoint_methods(&renamed)[..],
+        [crate::api::schema::Method::TabRename(params)]
+            if params.tab_id == "tab_1" && params.label == "orchestrator"
+    ));
 }

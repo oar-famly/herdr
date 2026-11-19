@@ -385,7 +385,7 @@ pub struct KeysConfig {
     pub next_agent: BindingConfig,
     /// Focus an agent by index 1-9. Unset by default.
     pub focus_agent: BindingConfig,
-    /// Open the agent menu (focus, move to a group, rename) for the focused agent. Unset by default.
+    /// Open the agent menu (focus, move to a group, rename tab) for the focused agent. Unset by default.
     pub agent_menu: BindingConfig,
     /// Local-client shortcut that sends a clipboard image to a remote Herdr session. Default: "ctrl+v".
     pub remote_image_paste: String,

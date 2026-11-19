@@ -635,7 +635,7 @@
           "key": "keys.agent_menu",
           "type": "keybinding",
           "default": "unset",
-          "description": "Open the agent menu (focus, move to a group, rename) for the focused agent. Unset by default."
+          "description": "Open the agent menu (focus, move to a group, rename tab) for the focused agent. Unset by default."
         },
         {
           "key": "keys.remote_image_paste",
